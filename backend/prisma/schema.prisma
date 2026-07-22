@@ -1,0 +1,170 @@
+// Prisma schema for Giant Man Express & Delivery
+// Hosted Postgres (e.g. Neon) for both local dev and production — see
+// DEPLOY.md for how DATABASE_URL is set in each environment.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// StaffUser.role is one of: ADMIN | DISPATCH
+// ADMIN — full system access: settings, drivers, businesses, reports, invoices.
+// DISPATCH — can view/assign jobs and monitor drivers, but no financial or
+// account-management access (no reports, invoices, driver/business editing).
+model StaffUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("ADMIN")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+model Driver {
+  id           String   @id @default(cuid())
+  name         String
+  employeeCode String   @unique
+  pinHash      String
+  phone        String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  jobs         Job[]
+  timeEntries  TimeEntry[]
+  hoursReports HoursReport[]
+}
+
+model JobType {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  active Boolean @default(true)
+
+  jobs Job[]
+}
+
+model Business {
+  id           String   @id @default(cuid())
+  name         String
+  contactName  String?
+  contactEmail String?
+  address      String?
+  billingRate  Float? // $ per hour, optional
+  createdAt    DateTime @default(now())
+
+  jobs     Job[]
+  invoices Invoice[]
+}
+
+// SQLite has no native enum support, so status fields are Strings.
+// Job.status is one of: ASSIGNED | ACCEPTED | IN_PROGRESS | COMPLETED | CANCELLED
+// (validated in application code — see src/lib/validation.ts)
+
+model Job {
+  id             String    @id @default(cuid())
+  title          String
+  jobTypeId      String
+  jobType        JobType   @relation(fields: [jobTypeId], references: [id])
+  driverId       String
+  driver         Driver    @relation(fields: [driverId], references: [id])
+  businessId     String?
+  business       Business? @relation(fields: [businessId], references: [id])
+  pickupAddress  String?
+  dropoffAddress String?
+  notes          String?
+  status         String    @default("ASSIGNED")
+  createdAt      DateTime  @default(now())
+  acceptedAt     DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  invoiceLineItems InvoiceLineItem[]
+
+  @@index([driverId])
+  @@index([businessId])
+  @@index([jobTypeId])
+  @@index([status])
+}
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  driverId    String
+  driver      Driver    @relation(fields: [driverId], references: [id])
+  clockInAt   DateTime
+  clockInLat  Float?
+  clockInLng  Float?
+  clockOutAt  DateTime?
+  clockOutLat Float?
+  clockOutLng Float?
+
+  // Covers both "find this driver's current open shift" and "list this driver's shifts"
+  @@index([driverId, clockOutAt])
+}
+
+model HoursReport {
+  id           String   @id @default(cuid())
+  reportNumber String   @unique
+  driverId     String
+  driver       Driver   @relation(fields: [driverId], references: [id])
+  periodStart  DateTime
+  periodEnd    DateTime
+  totalHours   Float
+  generatedAt  DateTime @default(now())
+  entriesJson  String // snapshot of the TimeEntry rows included, for a stable historical record
+
+  @@index([driverId])
+}
+
+// Invoice.status is one of: DRAFT | FINAL
+
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
+  periodStart   DateTime
+  periodEnd     DateTime
+  totalAmount   Float
+  status        String   @default("FINAL")
+  generatedAt   DateTime @default(now())
+
+  lineItems InvoiceLineItem[]
+
+  @@index([businessId])
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id])
+  jobId       String?
+  job         Job?    @relation(fields: [jobId], references: [id])
+  description String
+  quantity    Float
+  rate        Float
+  amount      Float
+
+  @@index([invoiceId])
+  @@index([jobId])
+}
+
+// Backs sequential, human-friendly numbering (HR-0001, INV-0001, ...)
+model Counter {
+  name  String @id
+  value Int    @default(0)
+}
+
+// Login-attempt throttling, keyed by e.g. "staff:email@x.com" or
+// "driver:D001". DB-backed (not in-memory) because the backend runs as
+// serverless functions in production — each invocation can land on a
+// different, short-lived process, so in-memory state wouldn't reliably
+// persist between requests. See src/lib/rateLimit.ts.
+model RateLimitAttempt {
+  key     String   @id
+  count   Int      @default(1)
+  resetAt DateTime
+}

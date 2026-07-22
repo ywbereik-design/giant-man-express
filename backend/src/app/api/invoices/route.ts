@@ -1,0 +1,99 @@
+import { NextRequest } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/db";
+import { requireRole } from "@/lib/auth";
+import { parseBody, isError } from "@/lib/api";
+import { nextNumber } from "@/lib/numbering";
+
+export async function GET(req: NextRequest) {
+  const auth = await requireRole(req, "ADMIN");
+  if ("error" in auth) return auth.error;
+
+  const { searchParams } = new URL(req.url);
+  const businessId = searchParams.get("businessId");
+
+  const invoices = await prisma.invoice.findMany({
+    where: businessId ? { businessId } : {},
+    orderBy: { generatedAt: "desc" },
+    include: { business: { select: { name: true } } },
+  });
+  return Response.json({ invoices });
+}
+
+const createSchema = z
+  .object({
+    businessId: z.string().min(1),
+    periodStart: z.string().datetime(),
+    periodEnd: z.string().datetime(),
+  })
+  .refine((data) => new Date(data.periodStart) < new Date(data.periodEnd), {
+    message: "periodStart must be before periodEnd",
+    path: ["periodEnd"],
+  });
+
+export async function POST(req: NextRequest) {
+  const auth = await requireRole(req, "ADMIN");
+  if ("error" in auth) return auth.error;
+
+  const body = await parseBody(req, createSchema);
+  if (isError(body)) return body.error;
+  const { businessId, periodStart, periodEnd } = body.data;
+
+  const business = await prisma.business.findUnique({ where: { id: businessId } });
+  if (!business) return Response.json({ error: "Business not found" }, { status: 404 });
+
+  if (business.billingRate == null) {
+    return Response.json(
+      { error: "Set a billing rate for this business before generating an invoice" },
+      { status: 400 }
+    );
+  }
+
+  const start = new Date(periodStart);
+  const end = new Date(periodEnd);
+
+  const jobs = await prisma.job.findMany({
+    where: {
+      businessId,
+      status: "COMPLETED",
+      completedAt: { gte: start, lt: end },
+      // Never bill the same completed job on two different invoices.
+      invoiceLineItems: { none: {} },
+    },
+    include: { jobType: true },
+    orderBy: { completedAt: "asc" },
+  });
+
+  if (jobs.length === 0) {
+    return Response.json(
+      { error: "No un-invoiced completed jobs for this business in the selected period" },
+      { status: 400 }
+    );
+  }
+
+  const rate = business.billingRate;
+  const lineItemsData = jobs.map((job) => ({
+    jobId: job.id,
+    description: `${job.jobType.name} — ${job.title} (${job.completedAt!.toLocaleDateString("en-CA")})`,
+    quantity: 1,
+    rate,
+    amount: rate,
+  }));
+  const totalAmount = lineItemsData.reduce((sum, li) => sum + li.amount, 0);
+
+  const invoiceNumber = await nextNumber("INV", "invoice");
+
+  const invoice = await prisma.invoice.create({
+    data: {
+      invoiceNumber,
+      businessId,
+      periodStart: start,
+      periodEnd: end,
+      totalAmount,
+      lineItems: { create: lineItemsData },
+    },
+    include: { business: true, lineItems: true },
+  });
+
+  return Response.json({ invoice }, { status: 201 });
+}

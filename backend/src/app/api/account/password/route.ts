@@ -1,0 +1,48 @@
+import { NextRequest } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/db";
+import { requireRole, hashSecret, verifySecret } from "@/lib/auth";
+import { parseBody, isError } from "@/lib/api";
+import { isRateLimited, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
+
+// Self-service password change for the currently logged-in Admin or Dispatch
+// account — distinct from /api/staff/[id], which lets an ADMIN reset any
+// staff member's password. This route only ever touches the caller's own row.
+const schema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
+
+export async function PATCH(req: NextRequest) {
+  const auth = await requireRole(req, ["ADMIN", "DISPATCH"]);
+  if ("error" in auth) return auth.error;
+
+  const body = await parseBody(req, schema);
+  if (isError(body)) return body.error;
+  const { currentPassword, newPassword } = body.data;
+  const key = `account-password:${auth.session.sub}`;
+
+  if (await isRateLimited(key)) {
+    return Response.json(
+      { error: "Too many failed attempts. Try again in a few minutes." },
+      { status: 429 }
+    );
+  }
+
+  const staff = await prisma.staffUser.findUnique({ where: { id: auth.session.sub } });
+  if (!staff || !(await verifySecret(currentPassword, staff.passwordHash))) {
+    await recordFailedAttempt(key);
+    // 400, not 401: the caller's session/token is perfectly valid — only the
+    // *current password* they supplied for confirmation was wrong. A 401
+    // here would make the app's client treat this like an expired session
+    // and force an unwanted logout instead of showing an inline form error.
+    return Response.json({ error: "Current password is incorrect" }, { status: 400 });
+  }
+
+  await clearAttempts(key);
+  await prisma.staffUser.update({
+    where: { id: staff.id },
+    data: { passwordHash: await hashSecret(newPassword) },
+  });
+  return Response.json({ ok: true });
+}
