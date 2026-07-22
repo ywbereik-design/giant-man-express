@@ -1,83 +1,121 @@
-# Deploying Giant Man Express & Delivery to the Internet
+# Deploying Giant Man Express & Delivery to the Internet + Play Store
 
 Right now the app runs locally on your computer — your phone reaches the
-backend over your home Wi-Fi. To make it work from anywhere (drivers out on
-the road, not just at home), you need to host the backend somewhere on the
-internet and point the app at it. This is a one-time setup.
+backend over your home Wi-Fi. This guide covers the two remaining steps to
+go live: hosting the backend on the internet, and building the Android app
+for the Play Store.
 
-You'll need to create the accounts and enter payment info yourself (a
-coding assistant can't do that step for you) — everything below is exact
-steps to follow.
+**What's already done** (as of this writing):
+- The database is already Postgres (not SQLite) — both local dev and
+  production use it, so there's no schema conversion step left to do.
+- Login-attempt rate limiting is stored in the database, not in memory —
+  this matters because the hosted backend runs as serverless functions
+  (see "Why Postgres-backed rate limiting" below).
+- `git init` has been run on the project; `mobile/eas.json` and the Android
+  package name (`ca.giantmanexpress.app`) are already configured.
 
-## 1. Move the database from SQLite to a hosted Postgres
+**What you need to do** — every step below marked **YOU** requires an
+account/payment only you can create. Everything else, tell me and I'll run
+it directly.
 
-SQLite (the local `dev.db` file) only works when the app runs on one
-machine. For a real hosted server you need a real database.
+---
 
-1. Create a free account at [neon.tech](https://neon.tech) (or any hosted
-   Postgres provider — Neon has a generous free tier and is simple to set
-   up).
-2. Create a new project/database. Copy the connection string it gives you
-   (looks like `postgresql://user:password@host/dbname?sslmode=require`).
-3. In `backend/prisma/schema.prisma`, change:
-   ```prisma
-   datasource db {
-     provider = "sqlite"
-     url      = env("DATABASE_URL")
-   }
-   ```
-   to:
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-4. In `backend/.env`, replace `DATABASE_URL="file:./dev.db"` with the Neon
-   connection string.
-5. Run `npx prisma migrate deploy` (from `backend/`) to create the tables
-   on the hosted database, then `npm run prisma:seed` to seed the default
-   job types and admin account.
+## 1. Neon (hosted Postgres) — **YOU**
 
-## 2. Host the backend
+1. Sign up free at [neon.tech](https://neon.tech).
+2. Create a project (e.g. "giant-man-express").
+3. Inside that project, create **two databases**: `production` and
+   `development` (Neon calls these databases or branches depending on the
+   UI — either works, just keep them separate). Keeping them separate means
+   your testing never touches real driver/client data once the app is live.
+4. For each database, copy the **pooled** connection string (Neon labels
+   one specifically for serverless/pooled use — that's the one to use,
+   not the "direct" one). It looks like:
+   `postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require`
+5. Give me both connection strings. I'll:
+   - Point local `backend/.env` at the `development` one, run
+     `npx prisma migrate deploy` + the seed script against it, and confirm
+     everything still works locally.
+   - Use the `production` one when deploying to Vercel (step 2).
 
-1. Create a free account at [vercel.com](https://vercel.com) (or Railway/
-   Render — Vercel is the simplest for a Next.js app like this one).
-2. Push this project to a GitHub repository (Vercel deploys from GitHub).
-3. In Vercel, "Import Project" and point it at the `backend/` folder.
-4. In the Vercel project's Environment Variables, set:
-   - `DATABASE_URL` — the Neon connection string from step 1
-   - `JWT_SECRET` — generate a long random string (don't reuse the
-     placeholder from local dev)
-5. Deploy. Vercel gives you a URL like `https://giant-man-express.vercel.app`.
+## 2. Vercel (hosting) — mostly me, one step from **YOU**
 
-## 3. Point the mobile app at the hosted backend
+1. **YOU**: sign up free at [vercel.com](https://vercel.com).
+2. I'll run `npx vercel login` from `backend/` — this opens a login link
+   you complete in your browser (or confirms via email). Let me know once
+   you've clicked through.
+3. Once logged in, I'll run `vercel --prod` to deploy directly from this
+   machine (no GitHub repo needed) and set the environment variables:
+   - `DATABASE_URL` — the **production** Neon connection string from step 1
+   - `JWT_SECRET` — a real random secret I've already generated for this
+     (not the local dev placeholder)
+4. Vercel gives back a URL like `https://giant-man-express.vercel.app`. I'll
+   run `npx prisma migrate deploy` against the production database (creates
+   the tables) and the seed script (creates default job types + your admin/
+   dispatch logins) before anyone uses it.
+5. I'll verify the live URL with the same test suite used throughout this
+   build — login for all 3 roles, job dispatch lifecycle, report/invoice
+   generation — before calling it done.
 
-1. In `mobile/.env`, change `EXPO_PUBLIC_API_BASE_URL` to your Vercel URL.
-2. Restart `npx expo start` so the app picks up the new value.
+## 3. Point the mobile app at the hosted backend — me
 
-At this point the app works from anywhere with internet, not just your
-home Wi-Fi — good enough for you and your drivers to use day to day via
-Expo Go, without needing to publish to the app stores yet.
+Once step 2 is live, I'll update `mobile/.env`'s `EXPO_PUBLIC_API_BASE_URL`
+to the Vercel URL and restart Expo. From this point, the app works from
+anywhere with internet — not just your home Wi-Fi — for you and your
+drivers using it via Expo Go, without needing the Play Store yet.
 
-## 4. Publishing to the Apple App Store / Google Play (optional, later)
+## 4. Expo/EAS account (for building the Android app) — **YOU**, then me
 
-Only needed once you want drivers to install the app permanently instead
-of through Expo Go.
+1. **YOU**: sign up free at [expo.dev](https://expo.dev).
+2. I'll run `eas login` — same pattern as Vercel, you complete the browser
+   confirmation, then tell me you're done.
+3. I'll run `eas build:configure` to link this project to your account
+   (this writes a `projectId` into `mobile/app.json` — normal, not a
+   secret).
+4. I'll run `eas build --platform android --profile preview` first — this
+   produces a plain `.apk` you can sideload straight onto your own Android
+   phone (no Play Store needed) to sanity-check the real build before
+   anything goes public.
+5. Once that looks good, `eas build --platform android --profile production`
+   produces the `.aab` file the Play Store actually wants.
 
-1. Apple: enroll in the
-   [Apple Developer Program](https://developer.apple.com/programs/)
-   ($99 USD/year). Google: create a
-   [Google Play Console](https://play.google.com/console/) account ($25
-   USD one-time).
-2. Install EAS CLI: `npm install -g eas-cli`, then `eas login`.
-3. From `mobile/`, run `eas build:configure` to set up the project.
-4. Run `eas build --platform ios` and `eas build --platform android` to
-   produce store-ready builds.
-5. Run `eas submit` to upload the builds to App Store Connect / Google
-   Play Console, then follow their review submission steps.
+## 5. Google Play Console — **YOU**, then me for the upload
 
-Expo's own guide (kept current for whatever SDK version you're on) is at
-https://docs.expo.dev/submit/introduction/ — worth reading through before
-this step since store requirements (screenshots, privacy policy, etc.)
-change over time.
+1. **YOU**: sign up at [play.google.com/console](https://play.google.com/console)
+   ($25 USD one-time). This can happen any time in parallel with steps 1–4 —
+   it's not needed until you're ready to actually submit.
+2. Play requires, even for a small/private app: a store listing (name,
+   description, icon — already have one), a handful of screenshots (I can
+   help you capture these from the running app), and a privacy policy URL
+   (a simple one is fine given what this app collects — driver GPS at
+   clock-in/out, names, contact info — I can draft the text, you'll need to
+   host it somewhere with a URL, e.g. a simple page on your business
+   website).
+3. Once the listing is ready and you have the `.aab` from step 4, I'll walk
+   you through uploading it (`eas submit` can automate this once you've
+   generated a Play Console API key, or we do it manually through the Play
+   Console UI — whichever you prefer).
+4. Google reviews new apps before publishing — this can take anywhere from
+   a few hours to a few days the first time.
+
+---
+
+## Why Postgres-backed rate limiting
+
+Vercel runs the backend as **serverless functions** — each request can be
+handled by a different, short-lived process instance rather than one
+long-running server. An in-memory login-attempt counter (a plain
+JavaScript `Map`) wouldn't reliably persist between requests in that model,
+which would make the login throttle inconsistent. Since the whole project
+had already moved to Postgres for the main database, the attempt counter
+was moved there too (`RateLimitAttempt` table) — same protection, works
+correctly under serverless.
+
+## Why two Neon databases instead of one
+
+Local development regularly creates and deletes test drivers, jobs,
+reports, and invoices (this happened constantly throughout building this
+app). If local dev pointed at the same database as production, that
+testing would corrupt real data once drivers and clients are actually
+using it. Two databases (same free Neon account, no extra cost) keeps them
+fully separate.
