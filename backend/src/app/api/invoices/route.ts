@@ -55,18 +55,18 @@ export async function POST(req: NextRequest) {
   const jobs = await prisma.job.findMany({
     where: {
       businessId,
-      status: "COMPLETED",
-      completedAt: { gte: start, lt: end },
-      // Never bill the same completed job on two different invoices.
+      status: "DELIVERED",
+      deliveredAt: { gte: start, lt: end },
+      // Never bill the same delivered job on two different invoices.
       invoiceLineItems: { none: {} },
     },
     include: { jobType: true },
-    orderBy: { completedAt: "asc" },
+    orderBy: { deliveredAt: "asc" },
   });
 
   if (jobs.length === 0) {
     return Response.json(
-      { error: "No un-invoiced completed jobs for this business in the selected period" },
+      { error: "No un-invoiced delivered jobs for this business in the selected period" },
       { status: 400 }
     );
   }
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
   const rate = business.billingRate;
   const lineItemsData = jobs.map((job) => ({
     jobId: job.id,
-    description: `${job.jobType.name} — ${job.title} (${job.completedAt!.toLocaleDateString("en-CA")})`,
+    description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")})`,
     quantity: 1,
     rate,
     amount: rate,

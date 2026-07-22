@@ -6,6 +6,7 @@ export interface HoursReportEntryRow {
   clockInAt: string;
   clockOutAt: string | null;
   hours: number;
+  distanceKm: number;
 }
 
 export interface HoursReportPdfProps {
@@ -16,11 +17,22 @@ export interface HoursReportPdfProps {
   periodEnd: string;
   generatedAt: string;
   totalHours: number;
+  totalDistanceKm: number;
   entries: HoursReportEntryRow[];
 }
 
 export function HoursReportDocument(props: HoursReportPdfProps) {
-  const { reportNumber, driverName, employeeCode, periodStart, periodEnd, generatedAt, totalHours, entries } = props;
+  const {
+    reportNumber,
+    driverName,
+    employeeCode,
+    periodStart,
+    periodEnd,
+    generatedAt,
+    totalHours,
+    totalDistanceKm,
+    entries,
+  } = props;
 
   return (
     <Document>
@@ -53,19 +65,21 @@ export function HoursReportDocument(props: HoursReportPdfProps) {
 
         <View style={styles.table}>
           <View style={styles.tableHeaderRow}>
-            <Text style={{ ...styles.tableHeaderCell, width: "20%" }}>Date</Text>
-            <Text style={{ ...styles.tableHeaderCell, width: "25%" }}>Clock In</Text>
-            <Text style={{ ...styles.tableHeaderCell, width: "25%" }}>Clock Out</Text>
-            <Text style={{ ...styles.tableHeaderCell, width: "30%", textAlign: "right" }}>Hours</Text>
+            <Text style={{ ...styles.tableHeaderCell, width: "18%" }}>Date</Text>
+            <Text style={{ ...styles.tableHeaderCell, width: "21%" }}>Clock In</Text>
+            <Text style={{ ...styles.tableHeaderCell, width: "21%" }}>Clock Out</Text>
+            <Text style={{ ...styles.tableHeaderCell, width: "20%", textAlign: "right" }}>Hours</Text>
+            <Text style={{ ...styles.tableHeaderCell, width: "20%", textAlign: "right" }}>Distance</Text>
           </View>
           {entries.map((e, i) => (
             <View style={styles.tableRow} key={i}>
-              <Text style={{ width: "20%" }}>{formatDate(e.clockInAt)}</Text>
-              <Text style={{ width: "25%" }}>{new Date(e.clockInAt).toLocaleTimeString("en-CA")}</Text>
-              <Text style={{ width: "25%" }}>
+              <Text style={{ width: "18%" }}>{formatDate(e.clockInAt)}</Text>
+              <Text style={{ width: "21%" }}>{new Date(e.clockInAt).toLocaleTimeString("en-CA")}</Text>
+              <Text style={{ width: "21%" }}>
                 {e.clockOutAt ? new Date(e.clockOutAt).toLocaleTimeString("en-CA") : "—"}
               </Text>
-              <Text style={{ width: "30%", textAlign: "right" }}>{formatHours(e.hours)}</Text>
+              <Text style={{ width: "20%", textAlign: "right" }}>{formatHours(e.hours)}</Text>
+              <Text style={{ width: "20%", textAlign: "right" }}>{e.distanceKm.toFixed(1)} km</Text>
             </View>
           ))}
         </View>
@@ -74,6 +88,10 @@ export function HoursReportDocument(props: HoursReportPdfProps) {
           <View style={styles.totalRow}>
             <Text style={styles.grandTotalLabel}>Total Hours</Text>
             <Text style={styles.grandTotalValue}>{formatHours(totalHours)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.grandTotalLabel}>Total Distance</Text>
+            <Text style={styles.grandTotalValue}>{totalDistanceKm.toFixed(1)} km</Text>
           </View>
         </View>
 

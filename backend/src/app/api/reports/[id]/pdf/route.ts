@@ -27,6 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       periodEnd: report.periodEnd.toISOString(),
       generatedAt: report.generatedAt.toISOString(),
       totalHours: report.totalHours,
+      totalDistanceKm: report.totalDistanceKm,
       entries,
     })
   );

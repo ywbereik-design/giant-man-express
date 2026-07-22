@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       driverId: auth.session.sub,
       ...(status && (JOB_STATUSES as readonly string[]).includes(status)
         ? { status }
-        : { status: { notIn: ["CANCELLED", "COMPLETED"] } }),
+        : { status: { notIn: ["CANCELLED", "DELIVERED"] } }),
     },
     orderBy: { createdAt: "desc" },
     include: { jobType: true, business: true },

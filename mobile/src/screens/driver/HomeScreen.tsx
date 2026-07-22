@@ -8,6 +8,7 @@ import { Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { ChangePinCard } from "../../components/ChangePinCard";
 import { colors, spacing } from "../../theme/theme";
 import { isShiftTrackingActive, startShiftTracking, stopShiftTracking } from "../../location/shiftTracking";
+import { captureSelfie } from "../../lib/captureSelfie";
 
 interface StatusResponse {
   clockedIn: boolean;
@@ -94,8 +95,22 @@ export function HomeScreen() {
     setNotice(null);
     setBusy(true);
     try {
+      let selfie: string | null;
+      try {
+        selfie = await captureSelfie();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not open the camera");
+        return;
+      }
+      if (!selfie) {
+        // Driver backed out of the camera — a selfie is required to clock
+        // in, so stop here rather than starting a shift with no proof photo.
+        setError("A selfie is required to clock in.");
+        return;
+      }
+
       const { coords, locationCaptured } = await getCoords();
-      await api.post("/api/driver/clock-in", coords ?? {});
+      await api.post("/api/driver/clock-in", { ...(coords ?? {}), selfie });
 
       const trackingMode = await startShiftTracking();
       const notices: string[] = [];
@@ -181,7 +196,7 @@ export function HomeScreen() {
       </Card>
 
       <Text style={styles.hint}>
-        Clocking in tracks your location and mileage until you clock out.
+        Clocking in takes a quick selfie and tracks your location and mileage until you clock out.
       </Text>
 
       <View style={{ marginTop: spacing.lg }}>

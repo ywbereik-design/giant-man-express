@@ -52,7 +52,9 @@ export function HistoryScreen() {
             <Text style={styles.times}>
               {new Date(item.clockInAt).toLocaleTimeString("en-CA")} — {item.clockOutAt ? new Date(item.clockOutAt).toLocaleTimeString("en-CA") : "—"}
             </Text>
-            <Text style={styles.hours}>{hoursBetween(item.clockInAt, item.clockOutAt)}</Text>
+            <Text style={styles.hours}>
+              {hoursBetween(item.clockInAt, item.clockOutAt)} · {item.distanceKm.toFixed(1)} km
+            </Text>
           </Card>
         )}
       />

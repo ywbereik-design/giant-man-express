@@ -69,8 +69,9 @@ model Business {
 }
 
 // SQLite has no native enum support, so status fields are Strings.
-// Job.status is one of: ASSIGNED | ACCEPTED | IN_PROGRESS | COMPLETED | CANCELLED
-// (validated in application code — see src/lib/validation.ts)
+// Job.status is one of:
+//   ASSIGNED | ACCEPTED | ARRIVED | PICKED_UP | ON_THE_WAY | DELIVERED | CANCELLED
+// (validated in application code — see src/lib/constants.ts)
 
 model Job {
   id             String    @id @default(cuid())
@@ -86,15 +87,15 @@ model Job {
   notes          String?
   status         String    @default("ASSIGNED")
   createdAt      DateTime  @default(now())
-  acceptedAt     DateTime?
-  startedAt      DateTime?
-  completedAt    DateTime?
 
-  // Captured when the driver taps "Arrived" (the ACCEPTED -> IN_PROGRESS
-  // transition) — a timestamped selfie proving the driver is on-site.
-  // arrivalPhoto is a compressed JPEG as a data URL (data:image/jpeg;base64,...).
-  arrivedAt      DateTime?
-  arrivalPhoto   String?
+  // One timestamp per stage of the driver-facing progress flow, set as the
+  // driver taps through Accept -> Arrived -> Picked Up -> On the Way ->
+  // Delivered (see DRIVER_ALLOWED_TRANSITIONS in src/lib/constants.ts).
+  acceptedAt  DateTime?
+  arrivedAt   DateTime?
+  pickedUpAt  DateTime?
+  onTheWayAt  DateTime?
+  deliveredAt DateTime?
 
   invoiceLineItems InvoiceLineItem[]
 
@@ -114,6 +115,12 @@ model TimeEntry {
   clockOutAt  DateTime?
   clockOutLat Float?
   clockOutLng Float?
+
+  // Selfie captured when the driver taps "Clock In" — a compressed JPEG
+  // data URL, shown to admin/dispatch as proof of who's on shift. Treated
+  // as expired 12h after clockInAt (see /api/drivers) rather than shown
+  // indefinitely for a shift that ran unusually long or was never closed out.
+  clockInPhoto String?
 
   // Cumulative Haversine distance (km) across every location ping received
   // while this shift was open. lastPingLat/Lng is the previous ping's
@@ -154,6 +161,7 @@ model HoursReport {
   periodStart  DateTime
   periodEnd    DateTime
   totalHours   Float
+  totalDistanceKm Float @default(0)
   generatedAt  DateTime @default(now())
   entriesJson  String // snapshot of the TimeEntry rows included, for a stable historical record
 

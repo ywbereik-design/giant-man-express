@@ -1,4 +1,11 @@
-export type JobStatus = "ASSIGNED" | "ACCEPTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type JobStatus =
+  | "ASSIGNED"
+  | "ACCEPTED"
+  | "ARRIVED"
+  | "PICKED_UP"
+  | "ON_THE_WAY"
+  | "DELIVERED"
+  | "CANCELLED";
 export type StaffRole = "ADMIN" | "DISPATCH";
 
 export interface Driver {
@@ -16,6 +23,17 @@ export interface Driver {
   currentLocationAt?: string | null;
   // Cumulative distance (km) across today's shift(s), staff-view only.
   todayDistanceKm?: number;
+  // The open shift's clock-in selfie, staff-view only — null once the shift
+  // has been open more than 12h (see backend SHIFT_PHOTO_EXPIRY_MS) or if
+  // the driver isn't currently clocked in.
+  clockInAt?: string | null;
+  clockInPhoto?: string | null;
+  clockInPhotoExpired?: boolean;
+  // The driver's most recently created not-yet-finished job — which stage
+  // of Accept -> Arrived -> Picked Up -> On the Way -> Delivered they're on.
+  // Null if they have no active job right now.
+  currentJobTitle?: string | null;
+  currentJobStatus?: JobStatus | null;
 }
 
 export interface RoutePoint {
@@ -60,13 +78,13 @@ export interface Job {
   dropoffAddress: string | null;
   notes: string | null;
   createdAt: string;
+  // One timestamp per stage of the driver progress flow: Accept -> Arrived
+  // -> Picked Up -> On the Way -> Delivered.
   acceptedAt: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  // Set together when the driver taps "Arrived" — a timestamp and a
-  // compressed selfie (data:image/jpeg;base64,...) proving they're on-site.
   arrivedAt: string | null;
-  arrivalPhoto: string | null;
+  pickedUpAt: string | null;
+  onTheWayAt: string | null;
+  deliveredAt: string | null;
   jobType: JobType;
   driver?: Driver;
   business?: Business | null;
@@ -91,6 +109,7 @@ export interface HoursReport {
   periodStart: string;
   periodEnd: string;
   totalHours: number;
+  totalDistanceKm: number;
   generatedAt: string;
   driver?: { name: string; employeeCode: string };
 }

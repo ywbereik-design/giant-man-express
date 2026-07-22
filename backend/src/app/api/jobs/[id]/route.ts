@@ -18,14 +18,19 @@ const updateSchema = z.object({
   status: z.enum(JOB_STATUSES).optional(),
 });
 
-// If an admin sets a status directly (bypassing the driver's own accept/start/
-// complete flow), keep the corresponding timestamp in sync — otherwise a job
-// marked COMPLETED this way would have no completedAt and silently never show
-// up in invoice generation, which filters on that field.
-const TIMESTAMP_FIELD: Partial<Record<string, "acceptedAt" | "startedAt" | "completedAt">> = {
+// If an admin/dispatch sets a status directly (bypassing the driver's own
+// accept/arrive/pick-up/deliver flow), keep the corresponding timestamp in
+// sync — otherwise a job marked DELIVERED this way would have no
+// deliveredAt and silently never show up in invoice generation, which
+// filters on that field.
+const TIMESTAMP_FIELD: Partial<
+  Record<string, "acceptedAt" | "arrivedAt" | "pickedUpAt" | "onTheWayAt" | "deliveredAt">
+> = {
   ACCEPTED: "acceptedAt",
-  IN_PROGRESS: "startedAt",
-  COMPLETED: "completedAt",
+  ARRIVED: "arrivedAt",
+  PICKED_UP: "pickedUpAt",
+  ON_THE_WAY: "onTheWayAt",
+  DELIVERED: "deliveredAt",
 };
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {

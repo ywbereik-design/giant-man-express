@@ -5,6 +5,7 @@ import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 import { roundKm, startOfTodayUTC } from "@/lib/geo";
+import { SHIFT_PHOTO_EXPIRY_MS } from "@/lib/constants";
 
 export async function GET(req: NextRequest) {
   // Dispatch gets read-only access here — they need the driver list to
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     }),
     prisma.timeEntry.findMany({
       where: { clockOutAt: null },
-      select: { driverId: true },
+      select: { driverId: true, clockInAt: true, clockInPhoto: true },
     }),
     prisma.timeEntry.findMany({
       where: {
@@ -44,18 +45,45 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  const clockedInIds = new Set(openEntries.map((e) => e.driverId));
+  // Each driver's most recently created not-yet-finished job — what stage of
+  // the Accept -> Arrived -> Picked Up -> On the Way -> Delivered flow
+  // they're currently on, for admin/dispatch to see at a glance without
+  // opening the Jobs screen. A driver could in principle have more than one
+  // active job at once; this surfaces the latest one, not all of them.
+  const activeJobs = drivers.length
+    ? await prisma.job.findMany({
+        where: { driverId: { in: drivers.map((d) => d.id) }, status: { notIn: ["DELIVERED", "CANCELLED"] } },
+        orderBy: { createdAt: "desc" },
+        distinct: ["driverId"],
+        select: { driverId: true, id: true, title: true, status: true },
+      })
+    : [];
+
+  const openEntryByDriver = new Map(openEntries.map((e) => [e.driverId, e]));
   const todayDistanceByDriver = new Map<string, number>();
   for (const entry of todaysEntries) {
     todayDistanceByDriver.set(entry.driverId, (todayDistanceByDriver.get(entry.driverId) ?? 0) + entry.distanceKm);
   }
+  const activeJobByDriver = new Map(activeJobs.map((j) => [j.driverId, j]));
+
+  const now = Date.now();
 
   return Response.json({
-    drivers: drivers.map((d) => ({
-      ...d,
-      clockedIn: clockedInIds.has(d.id),
-      todayDistanceKm: roundKm(todayDistanceByDriver.get(d.id) ?? 0),
-    })),
+    drivers: drivers.map((d) => {
+      const open = openEntryByDriver.get(d.id);
+      const expired = open ? now - open.clockInAt.getTime() > SHIFT_PHOTO_EXPIRY_MS : false;
+      const activeJob = activeJobByDriver.get(d.id);
+      return {
+        ...d,
+        clockedIn: !!open,
+        todayDistanceKm: roundKm(todayDistanceByDriver.get(d.id) ?? 0),
+        clockInAt: open?.clockInAt ?? null,
+        clockInPhoto: open && !expired ? open.clockInPhoto : null,
+        clockInPhotoExpired: expired,
+        currentJobTitle: activeJob?.title ?? null,
+        currentJobStatus: activeJob?.status ?? null,
+      };
+    }),
   });
 }
 

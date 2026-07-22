@@ -70,8 +70,10 @@ export async function POST(req: NextRequest) {
     clockInAt: e.clockInAt.toISOString(),
     clockOutAt: e.clockOutAt!.toISOString(),
     hours: (e.clockOutAt!.getTime() - e.clockInAt.getTime()) / 3600000,
+    distanceKm: e.distanceKm,
   }));
   const totalHours = rows.reduce((sum, r) => sum + r.hours, 0);
+  const totalDistanceKm = rows.reduce((sum, r) => sum + r.distanceKm, 0);
 
   const reportNumber = await nextNumber("HR", "hours_report");
 
@@ -82,6 +84,7 @@ export async function POST(req: NextRequest) {
       periodStart: start,
       periodEnd: end,
       totalHours,
+      totalDistanceKm,
       entriesJson: JSON.stringify(rows),
     },
     include: { driver: { select: { name: true, employeeCode: true } } },

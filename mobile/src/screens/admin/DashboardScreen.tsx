@@ -20,6 +20,7 @@ const DISPATCH_SECTIONS: MenuItem[] = [
 const ADMIN_SECTIONS: MenuItem[] = [
   { key: "Businesses", title: "Businesses", subtitle: "Manage the companies you work with" },
   { key: "Reports", title: "Hours Reports", subtitle: "Generate numbered driver hour reports" },
+  { key: "LocationReports", title: "Location Reports", subtitle: "Today's mileage and route per driver" },
   { key: "Invoices", title: "Invoices", subtitle: "Generate numbered invoices for clients" },
   { key: "Staff", title: "Staff Accounts", subtitle: "Create admin & dispatch logins" },
 ];

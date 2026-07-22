@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Image, Modal, Pressable, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
@@ -10,18 +10,32 @@ import { colors, spacing } from "../../theme/theme";
 const STATUS_TONE: Record<Job["status"], "info" | "success" | "danger" | "muted"> = {
   ASSIGNED: "info",
   ACCEPTED: "info",
-  IN_PROGRESS: "info",
-  COMPLETED: "success",
+  ARRIVED: "info",
+  PICKED_UP: "info",
+  ON_THE_WAY: "info",
+  DELIVERED: "success",
   CANCELLED: "muted",
 };
 
 const FILTERS = [
   { id: "ACTIVE", label: "Active" },
   { id: "ALL", label: "All" },
-  { id: "COMPLETED", label: "Completed" },
+  { id: "DELIVERED", label: "Delivered" },
   { id: "CANCELLED", label: "Cancelled" },
 ] as const;
 type FilterId = (typeof FILTERS)[number]["id"];
+
+// Stage timestamps shown on the card so far, in order — only the ones the
+// job has actually reached are rendered.
+const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
+  { field: "acceptedAt", label: "Accepted" },
+  { field: "arrivedAt", label: "Arrived" },
+  { field: "pickedUpAt", label: "Picked up" },
+  { field: "onTheWayAt", label: "On the way" },
+  { field: "deliveredAt", label: "Delivered" },
+];
+
+const ACTIVE_STATUSES: Job["status"][] = ["ASSIGNED", "ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY"];
 
 export function AdminJobsScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -41,7 +55,6 @@ export function AdminJobsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -70,7 +83,7 @@ export function AdminJobsScreen() {
 
   const visibleJobs = useMemo(() => {
     if (filter === "ALL") return jobs;
-    if (filter === "ACTIVE") return jobs.filter((j) => j.status === "ASSIGNED" || j.status === "ACCEPTED" || j.status === "IN_PROGRESS");
+    if (filter === "ACTIVE") return jobs.filter((j) => ACTIVE_STATUSES.includes(j.status));
     return jobs.filter((j) => j.status === filter);
   }, [jobs, filter]);
 
@@ -129,7 +142,6 @@ export function AdminJobsScreen() {
   if (initialLoading) return <CenteredSpinner />;
 
   return (
-    <>
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
@@ -182,42 +194,38 @@ export function AdminJobsScreen() {
         </View>
       }
       ListEmptyComponent={<Text style={styles.empty}>No jobs in this view.</Text>}
-      renderItem={({ item }) => (
-        <Card>
-          <View style={styles.headerRow}>
-            <Badge text={item.jobType.name} />
-            <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
-          </View>
-          <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
-          {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-          {item.arrivedAt && (
-            <Text style={styles.meta}>Arrived: {new Date(item.arrivedAt).toLocaleString("en-CA")}</Text>
-          )}
-          {item.arrivalPhoto && (
-            <Pressable onPress={() => setViewingPhoto(item.arrivalPhoto)} style={{ marginTop: spacing.sm }}>
-              <Image source={{ uri: item.arrivalPhoto }} style={styles.thumbnail} />
-            </Pressable>
-          )}
-          {item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
-            <View style={{ marginTop: spacing.sm }}>
-              <Button
-                title="Cancel Job"
-                variant="danger"
-                onPress={() => confirmCancelJob(item)}
-                loading={cancellingId === item.id}
-              />
+      renderItem={({ item }) => {
+        const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
+        return (
+          <Card>
+            <View style={styles.headerRow}>
+              <Badge text={item.jobType.name} />
+              <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
             </View>
-          )}
-        </Card>
-      )}
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
+            {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
+            {reachedStages.length > 0 && (
+              <Text style={styles.meta}>
+                {reachedStages
+                  .map((s) => `${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA")}`)
+                  .join(" · ")}
+              </Text>
+            )}
+            {item.status !== "DELIVERED" && item.status !== "CANCELLED" && (
+              <View style={{ marginTop: spacing.sm }}>
+                <Button
+                  title="Cancel Job"
+                  variant="danger"
+                  onPress={() => confirmCancelJob(item)}
+                  loading={cancellingId === item.id}
+                />
+              </View>
+            )}
+          </Card>
+        );
+      }}
     />
-    <Modal visible={!!viewingPhoto} transparent animationType="fade" onRequestClose={() => setViewingPhoto(null)}>
-      <Pressable style={styles.viewerBackdrop} onPress={() => setViewingPhoto(null)}>
-        {viewingPhoto && <Image source={{ uri: viewingPhoto }} style={styles.viewerImage} resizeMode="contain" />}
-      </Pressable>
-    </Modal>
-    </>
   );
 }
 
@@ -226,12 +234,4 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 16, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
-  thumbnail: { width: 80, height: 80, borderRadius: 8, backgroundColor: colors.surfaceAlt },
-  viewerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  viewerImage: { width: "100%", height: "80%" },
 });

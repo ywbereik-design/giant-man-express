@@ -6,6 +6,7 @@ import { JobTypesScreen } from "../screens/admin/JobTypesScreen";
 import { BusinessesScreen } from "../screens/admin/BusinessesScreen";
 import { AdminJobsScreen } from "../screens/admin/JobsScreen";
 import { ReportsScreen } from "../screens/admin/ReportsScreen";
+import { LocationReportsScreen } from "../screens/admin/LocationReportsScreen";
 import { InvoicesScreen } from "../screens/admin/InvoicesScreen";
 import { StaffScreen } from "../screens/admin/StaffScreen";
 import { LogoutButton } from "./LogoutButton";
@@ -18,6 +19,7 @@ export type AdminStackParamList = {
   Businesses: undefined;
   Jobs: undefined;
   Reports: undefined;
+  LocationReports: undefined;
   Invoices: undefined;
   Staff: undefined;
 };
@@ -40,6 +42,7 @@ export function AdminNavigator() {
       <Stack.Screen name="Businesses" component={BusinessesScreen} options={{ title: "Businesses" }} />
       <Stack.Screen name="Jobs" component={AdminJobsScreen} options={{ title: "Jobs & Dispatch" }} />
       <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: "Hours Reports" }} />
+      <Stack.Screen name="LocationReports" component={LocationReportsScreen} options={{ title: "Location Reports" }} />
       <Stack.Screen name="Invoices" component={InvoicesScreen} options={{ title: "Invoices" }} />
       <Stack.Screen name="Staff" component={StaffScreen} options={{ title: "Staff Accounts" }} />
     </Stack.Navigator>

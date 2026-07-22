@@ -116,7 +116,10 @@ export function ReportsScreen() {
           <Text style={styles.meta}>
             {new Date(item.periodStart).toLocaleDateString("en-CA")} – {new Date(item.periodEnd).toLocaleDateString("en-CA")}
           </Text>
-          <Text style={styles.hours}>{item.totalHours.toFixed(2)} hrs total</Text>
+          <View style={styles.statsRow}>
+            <Text style={styles.hours}>{item.totalHours.toFixed(2)} hrs</Text>
+            <Text style={styles.distance}>{item.totalDistanceKm.toFixed(1)} km</Text>
+          </View>
           <View style={{ marginTop: spacing.sm }}>
             <Button title="Share / Save PDF" variant="secondary" onPress={() => share(item)} loading={sharingId === item.id} />
           </View>
@@ -129,6 +132,8 @@ export function ReportsScreen() {
 const styles = StyleSheet.create({
   number: { color: colors.primary, fontWeight: "800", fontSize: 16 },
   meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
-  hours: { color: colors.text, marginTop: spacing.xs, fontWeight: "600" },
+  statsRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.xs },
+  hours: { color: colors.text, fontWeight: "600" },
+  distance: { color: colors.textMuted, fontWeight: "600" },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
 });
