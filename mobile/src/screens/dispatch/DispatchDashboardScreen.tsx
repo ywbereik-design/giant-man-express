@@ -11,6 +11,7 @@ type MenuItem = { key: keyof DispatchStackParamList; title: string; subtitle: st
 const ITEMS: MenuItem[] = [
   { key: "Jobs", title: "Jobs & Dispatch", subtitle: "Create and assign jobs, track status" },
   { key: "Drivers", title: "Drivers", subtitle: "Monitor who's active and currently clocked in" },
+  { key: "SelfieReports", title: "Selfie Reports", subtitle: "Every clock-in selfie, by driver and day" },
 ];
 
 export function DispatchDashboardScreen({

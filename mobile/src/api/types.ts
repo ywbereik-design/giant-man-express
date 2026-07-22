@@ -100,6 +100,11 @@ export interface TimeEntry {
   clockOutLat: number | null;
   clockOutLng: number | null;
   distanceKm: number;
+  // The selfie captured when this shift started — kept indefinitely (unlike
+  // the live view on the Drivers screen, which withholds it once the shift
+  // has been open too long or has closed), so Selfie Reports can look back
+  // at any past day. Staff-view only.
+  clockInPhoto?: string | null;
 }
 
 export interface HoursReport {
