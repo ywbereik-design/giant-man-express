@@ -7,6 +7,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { ChangePinCard } from "../../components/ChangePinCard";
 import { colors, spacing } from "../../theme/theme";
+import { isShiftTrackingActive, startShiftTracking, stopShiftTracking } from "../../location/shiftTracking";
 
 interface StatusResponse {
   clockedIn: boolean;
@@ -60,6 +61,17 @@ export function HomeScreen() {
     try {
       const res = await api.get<StatusResponse>("/api/driver/status");
       setStatus(res);
+
+      // Keep tracking in sync with the server's view of the shift — resumes
+      // it after an app relaunch while still clocked in, and stops a stray
+      // task if the server thinks the shift is closed (e.g. clocked out from
+      // another device).
+      const trackingActive = await isShiftTrackingActive();
+      if (res.clockedIn && !trackingActive) {
+        await startShiftTracking();
+      } else if (!res.clockedIn && trackingActive) {
+        await stopShiftTracking();
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not reach the server");
     } finally {
@@ -84,9 +96,19 @@ export function HomeScreen() {
     try {
       const { coords, locationCaptured } = await getCoords();
       await api.post("/api/driver/clock-in", coords ?? {});
+
+      const trackingMode = await startShiftTracking();
+      const notices: string[] = [];
       if (!locationCaptured) {
-        setNotice("Clocked in, but your location wasn't recorded (permission denied or unavailable).");
+        notices.push("Clocked in, but your location wasn't recorded (permission denied or unavailable).");
       }
+      if (trackingMode === "denied") {
+        notices.push("Mileage tracking is off — location permission wasn't granted.");
+      } else if (trackingMode === "foreground-only") {
+        notices.push("Mileage tracking only while the app is open — background location wasn't granted.");
+      }
+      if (notices.length) setNotice(notices.join(" "));
+
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not clock in");
@@ -99,6 +121,13 @@ export function HomeScreen() {
     setError(null);
     setNotice(null);
     setBusy(true);
+    // Stop tracking immediately on clock-out, before anything else, so no
+    // further location pings can be sent for this closed shift.
+    try {
+      await stopShiftTracking();
+    } catch {
+      // best-effort — don't block clocking out on this
+    }
     try {
       const { coords, locationCaptured } = await getCoords();
       await api.post("/api/driver/clock-out", coords ?? {});
@@ -131,9 +160,14 @@ export function HomeScreen() {
           <Text style={styles.statusText}>{clockedIn ? "Clocked In" : "Clocked Out"}</Text>
         </View>
         {clockedIn && status?.openEntry && (
-          <Text style={styles.since}>
-            Since {new Date(status.openEntry.clockInAt).toLocaleTimeString("en-CA")}
-          </Text>
+          <>
+            <Text style={styles.since}>
+              Since {new Date(status.openEntry.clockInAt).toLocaleTimeString("en-CA")}
+            </Text>
+            <Text style={styles.since}>
+              Distance this shift: {status.openEntry.distanceKm.toFixed(1)} km
+            </Text>
+          </>
         )}
 
         <ErrorText>{error}</ErrorText>
@@ -147,7 +181,7 @@ export function HomeScreen() {
       </Card>
 
       <Text style={styles.hint}>
-        Clocking in or out records your location so shift times can be verified.
+        Clocking in tracks your location and mileage until you clock out.
       </Text>
 
       <View style={{ marginTop: spacing.lg }}>

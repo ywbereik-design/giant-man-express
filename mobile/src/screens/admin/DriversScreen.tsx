@@ -185,6 +185,16 @@ export function DriversScreen() {
                 )}
               </View>
             </View>
+            {item.active && ((item.todayDistanceKm ?? 0) > 0 || item.clockedIn) && (
+              <Text style={styles.meta}>
+                Today: {(item.todayDistanceKm ?? 0).toFixed(1)} km
+                {item.clockedIn && item.currentLocationAt
+                  ? ` · last seen ${new Date(item.currentLocationAt).toLocaleTimeString("en-CA")}`
+                  : item.clockedIn
+                    ? " · waiting for first location ping"
+                    : ""}
+              </Text>
+            )}
             {canManage && (
               <View style={{ marginTop: spacing.sm, flexDirection: "row", gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>

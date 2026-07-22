@@ -10,6 +10,28 @@ export interface Driver {
   // Present when fetched by staff (admin or dispatch) — whether the driver
   // currently has an open (not yet clocked out) shift.
   clockedIn?: boolean;
+  // Live position, updated on every location ping while clocked in.
+  currentLat?: number | null;
+  currentLng?: number | null;
+  currentLocationAt?: string | null;
+  // Cumulative distance (km) across today's shift(s), staff-view only.
+  todayDistanceKm?: number;
+}
+
+export interface RoutePoint {
+  lat: number;
+  lng: number;
+  recordedAt: string;
+}
+
+export interface DriverLocationDetail {
+  driver: { id: string; name: string };
+  current: { lat: number; lng: number; at: string | null } | null;
+  today: {
+    distanceKm: number;
+    shifts: { id: string; clockInAt: string; clockOutAt: string | null; distanceKm: number }[];
+  };
+  route: RoutePoint[];
 }
 
 export interface JobType {
@@ -59,6 +81,7 @@ export interface TimeEntry {
   clockOutAt: string | null;
   clockOutLat: number | null;
   clockOutLng: number | null;
+  distanceKm: number;
 }
 
 export interface HoursReport {

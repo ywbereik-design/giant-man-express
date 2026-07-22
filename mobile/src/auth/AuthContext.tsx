@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import * as SecureStore from "expo-secure-store";
 import { api, setAuthToken, setSessionExpiredHandler } from "../api/client";
+import { SESSION_STORAGE_KEY } from "./storage";
+import { stopShiftTracking } from "../location/shiftTracking";
 
 export type Role = "ADMIN" | "DISPATCH" | "DRIVER";
 
@@ -23,7 +25,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "giant-man-session";
+const STORAGE_KEY = SESSION_STORAGE_KEY;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -82,6 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    // Belt-and-suspenders: clock-out already stops tracking, but logging out
+    // (e.g. force-logout on a 401) shouldn't leave a location task running
+    // against a session that's about to disappear.
+    try {
+      await stopShiftTracking();
+    } catch {
+      // best-effort — a stuck tracking task shouldn't block logout
+    }
     try {
       await SecureStore.deleteItemAsync(STORAGE_KEY);
     } catch {

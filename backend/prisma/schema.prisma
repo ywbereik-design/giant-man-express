@@ -34,9 +34,17 @@ model Driver {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  jobs         Job[]
-  timeEntries  TimeEntry[]
-  hoursReports HoursReport[]
+  // Denormalized "last known position", updated on every location ping while
+  // clocked in — lets the admin driver list show a live position without
+  // querying the full LocationPing history for every driver.
+  currentLat        Float?
+  currentLng        Float?
+  currentLocationAt DateTime?
+
+  jobs          Job[]
+  timeEntries   TimeEntry[]
+  hoursReports  HoursReport[]
+  locationPings LocationPing[]
 }
 
 model JobType {
@@ -107,8 +115,35 @@ model TimeEntry {
   clockOutLat Float?
   clockOutLng Float?
 
+  // Cumulative Haversine distance (km) across every location ping received
+  // while this shift was open. lastPingLat/Lng is the previous ping's
+  // position, kept so each new ping only needs to add one segment rather
+  // than replaying the whole route.
+  distanceKm  Float   @default(0)
+  lastPingLat Float?
+  lastPingLng Float?
+
+  locationPings LocationPing[]
+
   // Covers both "find this driver's current open shift" and "list this driver's shifts"
   @@index([driverId, clockOutAt])
+}
+
+// One row per GPS ping received while a driver is clocked in — the route
+// history behind the admin live map / "today's mileage" view. Only ever
+// written while the parent TimeEntry is open (see POST /api/driver/location).
+model LocationPing {
+  id          String   @id @default(cuid())
+  driverId    String
+  driver      Driver   @relation(fields: [driverId], references: [id])
+  timeEntryId String
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id])
+  lat         Float
+  lng         Float
+  recordedAt  DateTime @default(now())
+
+  @@index([timeEntryId, recordedAt])
+  @@index([driverId, recordedAt])
 }
 
 model HoursReport {

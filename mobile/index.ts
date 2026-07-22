@@ -1,5 +1,10 @@
 import { registerRootComponent } from 'expo';
 
+// Registers the TaskManager task used for shift location tracking. Must be
+// imported before the app runs so the task is defined even on a headless
+// relaunch (app process killed while a driver was still clocked in).
+import './src/location/shiftLocationTask';
+
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

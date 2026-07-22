@@ -29,7 +29,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Giant Man Express uses your location to record where you clock in and out."
+          "locationWhenInUsePermission": "Giant Man Express uses your location to record where you clock in and out.",
+          "locationAlwaysAndWhenInUsePermission": "Giant Man Express tracks your location and mileage while you're clocked in, including when the app is in the background.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

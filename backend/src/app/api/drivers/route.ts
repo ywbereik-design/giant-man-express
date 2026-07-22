@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
+import { roundKm, startOfTodayUTC } from "@/lib/geo";
 
 export async function GET(req: NextRequest) {
   // Dispatch gets read-only access here — they need the driver list to
@@ -12,7 +13,10 @@ export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ["ADMIN", "DISPATCH"]);
   if ("error" in auth) return auth.error;
 
-  const [drivers, openEntries] = await Promise.all([
+  const dayStart = startOfTodayUTC();
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const [drivers, openEntries, todaysEntries] = await Promise.all([
     prisma.driver.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -22,17 +26,36 @@ export async function GET(req: NextRequest) {
         phone: true,
         active: true,
         createdAt: true,
+        currentLat: true,
+        currentLng: true,
+        currentLocationAt: true,
       },
     }),
     prisma.timeEntry.findMany({
       where: { clockOutAt: null },
       select: { driverId: true },
     }),
+    prisma.timeEntry.findMany({
+      where: {
+        clockInAt: { lt: dayEnd },
+        OR: [{ clockOutAt: null }, { clockOutAt: { gte: dayStart } }],
+      },
+      select: { driverId: true, distanceKm: true },
+    }),
   ]);
 
   const clockedInIds = new Set(openEntries.map((e) => e.driverId));
+  const todayDistanceByDriver = new Map<string, number>();
+  for (const entry of todaysEntries) {
+    todayDistanceByDriver.set(entry.driverId, (todayDistanceByDriver.get(entry.driverId) ?? 0) + entry.distanceKm);
+  }
+
   return Response.json({
-    drivers: drivers.map((d) => ({ ...d, clockedIn: clockedInIds.has(d.id) })),
+    drivers: drivers.map((d) => ({
+      ...d,
+      clockedIn: clockedInIds.has(d.id),
+      todayDistanceKm: roundKm(todayDistanceByDriver.get(d.id) ?? 0),
+    })),
   });
 }
 
