@@ -42,7 +42,8 @@
           "cameraPermission": "Giant Man Express uses your camera to take an arrival selfie when you start a job.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

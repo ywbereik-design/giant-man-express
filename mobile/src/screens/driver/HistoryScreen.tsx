@@ -5,6 +5,7 @@ import { api, ApiError } from "../../api/client";
 import { TimeEntry } from "../../api/types";
 import { Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { colors, spacing } from "../../theme/theme";
+import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 
 function hoursBetween(a: string, b: string | null): string {
   if (!b) return "in progress";
@@ -13,6 +14,7 @@ function hoursBetween(a: string, b: string | null): string {
 }
 
 export function HistoryScreen() {
+  const tabBarHeight = useDriverTabBarHeight();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -40,7 +42,7 @@ export function HistoryScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <FlatList
-        contentContainerStyle={{ padding: spacing.md }}
+        contentContainerStyle={{ padding: spacing.md, paddingTop: spacing.md + tabBarHeight }}
         data={entries}
         keyExtractor={(e) => e.id}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={async () => { setLoading(true); await load(); setLoading(false); }} tintColor={colors.primary} />}

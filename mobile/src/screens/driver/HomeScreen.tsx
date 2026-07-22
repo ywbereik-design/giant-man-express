@@ -9,6 +9,7 @@ import { ChangePinCard } from "../../components/ChangePinCard";
 import { colors, spacing } from "../../theme/theme";
 import { isShiftTrackingActive, startShiftTracking, stopShiftTracking } from "../../location/shiftTracking";
 import { captureSelfie } from "../../lib/captureSelfie";
+import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 
 interface StatusResponse {
   clockedIn: boolean;
@@ -51,6 +52,7 @@ async function getCoords(): Promise<CoordsResult> {
 
 export function HomeScreen() {
   const { session } = useAuth();
+  const tabBarHeight = useDriverTabBarHeight();
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -164,7 +166,7 @@ export function HomeScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: spacing.md }}
+      contentContainerStyle={{ padding: spacing.md, paddingTop: spacing.md + tabBarHeight }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
       <Text style={styles.greeting}>Hi, {session?.name}</Text>

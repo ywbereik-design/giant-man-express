@@ -5,6 +5,7 @@ import { api, ApiError } from "../../api/client";
 import { Job, JobStatus } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { colors, spacing } from "../../theme/theme";
+import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 
 const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = {
   ASSIGNED: "info",
@@ -34,6 +35,7 @@ const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
 ];
 
 export function DriverJobsScreen() {
+  const tabBarHeight = useDriverTabBarHeight();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -78,7 +80,7 @@ export function DriverJobsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <FlatList
-        contentContainerStyle={{ padding: spacing.md }}
+        contentContainerStyle={{ padding: spacing.md, paddingTop: spacing.md + tabBarHeight }}
         data={jobs}
         keyExtractor={(j) => j.id}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={async () => { setLoading(true); await load(); setLoading(false); }} tintColor={colors.primary} />}
