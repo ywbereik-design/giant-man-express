@@ -82,6 +82,12 @@ model Job {
   startedAt      DateTime?
   completedAt    DateTime?
 
+  // Captured when the driver taps "Arrived" (the ACCEPTED -> IN_PROGRESS
+  // transition) — a timestamped selfie proving the driver is on-site.
+  // arrivalPhoto is a compressed JPEG as a data URL (data:image/jpeg;base64,...).
+  arrivedAt      DateTime?
+  arrivalPhoto   String?
+
   invoiceLineItems InvoiceLineItem[]
 
   @@index([driverId])

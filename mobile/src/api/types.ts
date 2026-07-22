@@ -41,6 +41,10 @@ export interface Job {
   acceptedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  // Set together when the driver taps "Arrived" — a timestamp and a
+  // compressed selfie (data:image/jpeg;base64,...) proving they're on-site.
+  arrivedAt: string | null;
+  arrivalPhoto: string | null;
   jobType: JobType;
   driver?: Driver;
   business?: Business | null;

@@ -31,6 +31,13 @@
         {
           "locationWhenInUsePermission": "Giant Man Express uses your location to record where you clock in and out."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Giant Man Express uses your camera to take an arrival selfie when you start a job.",
+          "microphonePermission": false
+        }
       ]
     ]
   }

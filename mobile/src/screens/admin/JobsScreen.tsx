@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, Image, Modal, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
@@ -41,6 +41,7 @@ export function AdminJobsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -128,6 +129,7 @@ export function AdminJobsScreen() {
   if (initialLoading) return <CenteredSpinner />;
 
   return (
+    <>
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
@@ -189,6 +191,14 @@ export function AdminJobsScreen() {
           <Text style={styles.title}>{item.title}</Text>
           <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
           {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
+          {item.arrivedAt && (
+            <Text style={styles.meta}>Arrived: {new Date(item.arrivedAt).toLocaleString("en-CA")}</Text>
+          )}
+          {item.arrivalPhoto && (
+            <Pressable onPress={() => setViewingPhoto(item.arrivalPhoto)} style={{ marginTop: spacing.sm }}>
+              <Image source={{ uri: item.arrivalPhoto }} style={styles.thumbnail} />
+            </Pressable>
+          )}
           {item.status !== "COMPLETED" && item.status !== "CANCELLED" && (
             <View style={{ marginTop: spacing.sm }}>
               <Button
@@ -202,6 +212,12 @@ export function AdminJobsScreen() {
         </Card>
       )}
     />
+    <Modal visible={!!viewingPhoto} transparent animationType="fade" onRequestClose={() => setViewingPhoto(null)}>
+      <Pressable style={styles.viewerBackdrop} onPress={() => setViewingPhoto(null)}>
+        {viewingPhoto && <Image source={{ uri: viewingPhoto }} style={styles.viewerImage} resizeMode="contain" />}
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -210,4 +226,12 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 16, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
+  thumbnail: { width: 80, height: 80, borderRadius: 8, backgroundColor: colors.surfaceAlt },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerImage: { width: "100%", height: "80%" },
 });

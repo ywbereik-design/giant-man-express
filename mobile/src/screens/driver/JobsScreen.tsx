@@ -1,6 +1,8 @@
 import React, { useCallback, useState } from "react";
 import { FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { api, ApiError } from "../../api/client";
 import { Job, JobStatus } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
@@ -16,9 +18,34 @@ const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = 
 
 const NEXT_ACTION: Partial<Record<JobStatus, { label: string; next: JobStatus }>> = {
   ASSIGNED: { label: "Accept Job", next: "ACCEPTED" },
-  ACCEPTED: { label: "Start Job", next: "IN_PROGRESS" },
+  ACCEPTED: { label: "Arrived", next: "IN_PROGRESS" },
   IN_PROGRESS: { label: "Mark Completed", next: "COMPLETED" },
 };
+
+// Takes a front-camera selfie and compresses it down to something small
+// enough to send over mobile data and store inline — resized to a modest
+// width and re-encoded as a JPEG at moderate quality. Returns null if the
+// driver backs out of the camera (not an error, just no photo taken).
+async function captureArrivalSelfie(): Promise<string | null> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (permission.status !== "granted") {
+    throw new Error("Camera permission is required to mark arrival");
+  }
+
+  const result = await ImagePicker.launchCameraAsync({
+    cameraType: ImagePicker.CameraType.front,
+    quality: 0.7,
+  });
+  if (result.canceled || !result.assets?.[0]) return null;
+
+  const context = ImageManipulator.manipulate(result.assets[0].uri);
+  context.resize({ width: 800 });
+  const rendered = await context.renderAsync();
+  const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.6, base64: true });
+  if (!saved.base64) return null;
+
+  return `data:image/jpeg;base64,${saved.base64}`;
+}
 
 export function DriverJobsScreen() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -47,10 +74,23 @@ export function DriverJobsScreen() {
   async function advance(job: Job) {
     const action = NEXT_ACTION[job.status];
     if (!action) return;
-    setUpdatingId(job.id);
     setError(null);
+
+    let selfie: string | undefined;
+    if (action.next === "IN_PROGRESS") {
+      try {
+        const photo = await captureArrivalSelfie();
+        if (!photo) return; // driver backed out of the camera — no partial state change
+        selfie = photo;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not capture arrival selfie");
+        return;
+      }
+    }
+
+    setUpdatingId(job.id);
     try {
-      await api.patch(`/api/driver/jobs/${job.id}/status`, { status: action.next });
+      await api.patch(`/api/driver/jobs/${job.id}/status`, { status: action.next, ...(selfie ? { selfie } : {}) });
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not update job");
@@ -83,6 +123,9 @@ export function DriverJobsScreen() {
               {item.pickupAddress && <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>}
               {item.dropoffAddress && <Text style={styles.meta}>Dropoff: {item.dropoffAddress}</Text>}
               {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
+              {item.arrivedAt && (
+                <Text style={styles.meta}>Arrived: {new Date(item.arrivedAt).toLocaleTimeString("en-CA")}</Text>
+              )}
               {action && (
                 <View style={{ marginTop: spacing.sm }}>
                   <Button
