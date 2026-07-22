@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       status: nextStatus,
       [TIMESTAMP_FIELD[nextStatus]]: new Date(),
     },
-    include: { jobType: true, business: true },
+    include: { jobType: true, business: true, dropoffStops: { orderBy: { sequence: "asc" } } },
   });
   return Response.json({ job: updated });
 }

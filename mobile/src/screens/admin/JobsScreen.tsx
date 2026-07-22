@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
@@ -50,7 +50,7 @@ export function AdminJobsScreen() {
   const [driverId, setDriverId] = useState<string | null>(null);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [pickupAddress, setPickupAddress] = useState("");
-  const [dropoffAddress, setDropoffAddress] = useState("");
+  const [dropoffAddresses, setDropoffAddresses] = useState<string[]>([""]);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -87,6 +87,18 @@ export function AdminJobsScreen() {
     return jobs.filter((j) => j.status === filter);
   }, [jobs, filter]);
 
+  function updateDropoffAt(index: number, value: string) {
+    setDropoffAddresses((prev) => prev.map((a, i) => (i === index ? value : a)));
+  }
+
+  function addDropoffField() {
+    setDropoffAddresses((prev) => [...prev, ""]);
+  }
+
+  function removeDropoffField(index: number) {
+    setDropoffAddresses((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : [""]));
+  }
+
   async function createJob() {
     setError(null);
     if (!title.trim() || !jobTypeId || !driverId) {
@@ -101,7 +113,7 @@ export function AdminJobsScreen() {
         driverId,
         businessId: businessId ?? undefined,
         pickupAddress: pickupAddress.trim() || undefined,
-        dropoffAddress: dropoffAddress.trim() || undefined,
+        dropoffAddresses: dropoffAddresses.map((a) => a.trim()).filter(Boolean),
         notes: notes.trim() || undefined,
       });
       setTitle("");
@@ -109,7 +121,7 @@ export function AdminJobsScreen() {
       setDriverId(null);
       setBusinessId(null);
       setPickupAddress("");
-      setDropoffAddress("");
+      setDropoffAddresses([""]);
       setNotes("");
       await load();
     } catch (e) {
@@ -177,8 +189,26 @@ export function AdminJobsScreen() {
 
             <Label>Pickup Address (optional)</Label>
             <FieldInput value={pickupAddress} onChangeText={setPickupAddress} placeholder="123 Depot Rd" />
-            <Label>Dropoff Address (optional)</Label>
-            <FieldInput value={dropoffAddress} onChangeText={setDropoffAddress} placeholder="456 Client Ave" />
+
+            <Label>Delivery Stops (optional)</Label>
+            {dropoffAddresses.map((address, index) => (
+              <View key={index} style={styles.stopRow}>
+                <View style={{ flex: 1 }}>
+                  <FieldInput
+                    value={address}
+                    onChangeText={(v) => updateDropoffAt(index, v)}
+                    placeholder={dropoffAddresses.length > 1 ? `Stop ${index + 1} — 456 Client Ave` : "456 Client Ave"}
+                  />
+                </View>
+                {(dropoffAddresses.length > 1 || address.length > 0) && (
+                  <Pressable onPress={() => removeDropoffField(index)} style={styles.removeStop} hitSlop={8}>
+                    <Text style={styles.removeStopText}>Remove</Text>
+                  </Pressable>
+                )}
+              </View>
+            ))}
+            <Button title="+ Add Delivery Stop" variant="secondary" onPress={addDropoffField} />
+
             <Label>Notes (optional)</Label>
             <FieldInput value={notes} onChangeText={setNotes} placeholder="Gate code, contact, etc." />
 
@@ -205,6 +235,13 @@ export function AdminJobsScreen() {
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
             {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
+            {item.pickupAddress && <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>}
+            {item.dropoffStops.map((stop, i) => (
+              <Text key={stop.id} style={styles.meta}>
+                {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+                {stop.address}
+              </Text>
+            ))}
             {reachedStages.length > 0 && (
               <Text style={styles.meta}>
                 {reachedStages
@@ -234,4 +271,7 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 16, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
+  stopRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  removeStop: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
+  removeStopText: { color: colors.danger, fontSize: 13, fontWeight: "600" },
 });

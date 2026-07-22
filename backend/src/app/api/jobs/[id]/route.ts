@@ -13,7 +13,8 @@ const updateSchema = z.object({
   driverId: z.string().min(1).optional(),
   businessId: z.string().min(1).nullable().optional(),
   pickupAddress: z.string().trim().optional(),
-  dropoffAddress: z.string().trim().optional(),
+  // When provided, replaces the job's whole set of delivery stops.
+  dropoffAddresses: z.array(z.string().trim().min(1)).optional(),
   notes: z.string().trim().optional(),
   status: z.enum(JOB_STATUSES).optional(),
 });
@@ -39,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await parseBody(req, updateSchema);
   if (isError(body)) return body.error;
-  const { status, ...rest } = body.data;
+  const { status, dropoffAddresses, ...rest } = body.data;
   const timestampField = status ? TIMESTAMP_FIELD[status] : undefined;
 
   const result = await runOrRespond(() =>
@@ -49,8 +50,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         ...rest,
         ...(status ? { status } : {}),
         ...(timestampField ? { [timestampField]: new Date() } : {}),
+        ...(dropoffAddresses !== undefined
+          ? {
+              dropoffStops: {
+                deleteMany: {},
+                create: dropoffAddresses.map((address, sequence) => ({ address, sequence })),
+              },
+            }
+          : {}),
       },
-      include: { jobType: true, driver: { select: safeDriverSelect }, business: true },
+      include: {
+        jobType: true,
+        driver: { select: safeDriverSelect },
+        business: true,
+        dropoffStops: { orderBy: { sequence: "asc" } },
+      },
     })
   );
   if (isResponse(result)) return result;

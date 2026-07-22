@@ -83,10 +83,12 @@ model Job {
   businessId     String?
   business       Business? @relation(fields: [businessId], references: [id])
   pickupAddress  String?
-  dropoffAddress String?
   notes          String?
   status         String    @default("ASSIGNED")
   createdAt      DateTime  @default(now())
+
+  // One pickup, any number of delivery stops — see JobStop below.
+  dropoffStops JobStop[]
 
   // One timestamp per stage of the driver-facing progress flow, set as the
   // driver taps through Accept -> Arrived -> Picked Up -> On the Way ->
@@ -103,6 +105,18 @@ model Job {
   @@index([businessId])
   @@index([jobTypeId])
   @@index([status])
+}
+
+// A single delivery location on a job — a job has exactly one pickup
+// (Job.pickupAddress) and any number of these, in route order.
+model JobStop {
+  id       String @id @default(cuid())
+  jobId    String
+  job      Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  address  String
+  sequence Int    @default(0)
+
+  @@index([jobId, sequence])
 }
 
 model TimeEntry {

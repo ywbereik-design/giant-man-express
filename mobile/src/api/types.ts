@@ -70,12 +70,19 @@ export interface Business {
   billingRate?: number | null;
 }
 
+export interface JobStop {
+  id: string;
+  address: string;
+  sequence: number;
+}
+
 export interface Job {
   id: string;
   title: string;
   status: JobStatus;
   pickupAddress: string | null;
-  dropoffAddress: string | null;
+  // Any number of delivery locations, in route order.
+  dropoffStops: JobStop[];
   notes: string | null;
   createdAt: string;
   // One timestamp per stage of the driver progress flow: Accept -> Arrived

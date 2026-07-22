@@ -96,7 +96,12 @@ export function DriverJobsScreen() {
               <Text style={styles.title}>{item.title}</Text>
               {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
               {item.pickupAddress && <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>}
-              {item.dropoffAddress && <Text style={styles.meta}>Dropoff: {item.dropoffAddress}</Text>}
+              {item.dropoffStops.map((stop, i) => (
+                <Text key={stop.id} style={styles.meta}>
+                  {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+                  {stop.address}
+                </Text>
+              ))}
               {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
               {reachedStages.length > 0 && (
                 <Text style={styles.meta}>

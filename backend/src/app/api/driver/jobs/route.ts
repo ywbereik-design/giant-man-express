@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
         : { status: { notIn: ["CANCELLED", "DELIVERED"] } }),
     },
     orderBy: { createdAt: "desc" },
-    include: { jobType: true, business: true },
+    include: { jobType: true, business: true, dropoffStops: { orderBy: { sequence: "asc" } } },
   });
   return Response.json({ jobs });
 }

@@ -7,6 +7,13 @@ import { JOB_STATUSES } from "@/lib/constants";
 import { safeDriverSelect } from "@/lib/select";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
+const JOB_INCLUDE = {
+  jobType: true,
+  driver: { select: safeDriverSelect },
+  business: true,
+  dropoffStops: { orderBy: { sequence: "asc" as const } },
+};
+
 export async function GET(req: NextRequest) {
   // Dispatch and admin both need full visibility into jobs — dispatching
   // and tracking jobs is dispatch's core function.
@@ -23,7 +30,7 @@ export async function GET(req: NextRequest) {
       ...(driverId ? { driverId } : {}),
     },
     orderBy: { createdAt: "desc" },
-    include: { jobType: true, driver: { select: safeDriverSelect }, business: true },
+    include: JOB_INCLUDE,
   });
   return Response.json({ jobs });
 }
@@ -34,7 +41,8 @@ const createSchema = z.object({
   driverId: z.string().min(1),
   businessId: z.string().min(1).optional(),
   pickupAddress: z.string().trim().optional(),
-  dropoffAddress: z.string().trim().optional(),
+  // One pickup, any number of delivery stops, in route order.
+  dropoffAddresses: z.array(z.string().trim().min(1)).optional(),
   notes: z.string().trim().optional(),
 });
 
@@ -44,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   const body = await parseBody(req, createSchema);
   if (isError(body)) return body.error;
-  const { jobTypeId, driverId, businessId } = body.data;
+  const { jobTypeId, driverId, businessId, dropoffAddresses, ...jobData } = body.data;
 
   const [jobType, driver, business] = await Promise.all([
     prisma.jobType.findUnique({ where: { id: jobTypeId } }),
@@ -64,8 +72,17 @@ export async function POST(req: NextRequest) {
 
   const result = await runOrRespond(() =>
     prisma.job.create({
-      data: { ...body.data, status: JOB_STATUSES[0] },
-      include: { jobType: true, driver: { select: safeDriverSelect }, business: true },
+      data: {
+        ...jobData,
+        jobTypeId,
+        driverId,
+        businessId,
+        status: JOB_STATUSES[0],
+        ...(dropoffAddresses?.length
+          ? { dropoffStops: { create: dropoffAddresses.map((address, sequence) => ({ address, sequence })) } }
+          : {}),
+      },
+      include: JOB_INCLUDE,
     })
   );
   if (isResponse(result)) return result;
