@@ -6,6 +6,7 @@ import { Job, JobStatus } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { colors, spacing } from "../../theme/theme";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
+import { DriverRouteMap } from "../../components/DriverRouteMap";
 
 const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = {
   ASSIGNED: "info",
@@ -33,6 +34,22 @@ const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
   { field: "onTheWayAt", label: "On the way" },
   { field: "deliveredAt", label: "Delivered" },
 ];
+
+// Where the live route map should point for a job currently in progress:
+// the pickup before the driver has arrived there, otherwise the next
+// not-yet-reached delivery stop. Null for jobs that aren't actively being
+// worked (not yet accepted, or already finished) or have no address to route to.
+function routeDestination(job: Job): { address: string; label: string } | null {
+  if (job.status === "ACCEPTED") {
+    return job.pickupAddress ? { address: job.pickupAddress, label: "Pickup" } : null;
+  }
+  if (job.status === "ARRIVED" || job.status === "PICKED_UP" || job.status === "ON_THE_WAY") {
+    const nextStop = job.dropoffStops[0];
+    if (!nextStop) return null;
+    return { address: nextStop.address, label: job.dropoffStops.length > 1 ? "Next Stop" : "Dropoff" };
+  }
+  return null;
+}
 
 export function DriverJobsScreen() {
   const tabBarHeight = useDriverTabBarHeight();
@@ -89,6 +106,7 @@ export function DriverJobsScreen() {
         renderItem={({ item }) => {
           const action = NEXT_ACTION[item.status];
           const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
+          const destination = routeDestination(item);
           return (
             <Card>
               <View style={styles.headerRow}>
@@ -105,6 +123,9 @@ export function DriverJobsScreen() {
                 </Text>
               ))}
               {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
+              {destination && (
+                <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />
+              )}
               {reachedStages.length > 0 && (
                 <Text style={styles.meta}>
                   {reachedStages

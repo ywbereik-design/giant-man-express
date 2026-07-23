@@ -2,7 +2,9 @@ import React from "react";
 import { View, Pressable, Text, StyleSheet, LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
 import { LogoutButton } from "./LogoutButton";
+import { DriverTabSegmentBar, DriverTabKey } from "./DriverTabSegmentBar";
 import { colors, spacing } from "../theme/theme";
 
 // Replaces the native per-screen header entirely (see DriverNavigator, which
@@ -25,37 +27,29 @@ export function DriverTopTabBar({
   return (
     <View style={[styles.container, { paddingTop: insets.top }]} onLayout={onLayout}>
       <View style={styles.headerRow}>
+        <Pressable
+          onPress={() => navigation.getParent()?.goBack()}
+          hitSlop={12}
+          style={styles.backButton}
+          accessibilityLabel="Back to Welcome"
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
+        </Pressable>
         <Text style={styles.headerTitle}>Giant Man Express</Text>
         <LogoutButton />
       </View>
-      <View style={styles.segmentGroup}>
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const label = (options.tabBarLabel as string | undefined) ?? options.title ?? route.name;
-          const focused = state.index === index;
-          const color = focused ? colors.primaryText : colors.textMuted;
-
-          function onPress() {
-            const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
-            if (!focused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
+      <DriverTabSegmentBar
+        activeTab={state.routes[state.index].name as DriverTabKey}
+        onSelect={(tab) => {
+          const route = state.routes.find((r) => r.name === tab);
+          if (!route) return;
+          const focused = state.routes[state.index].name === tab;
+          const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+          if (!focused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
           }
-
-          return (
-            <Pressable
-              key={route.key}
-              onPress={onPress}
-              accessibilityRole="button"
-              accessibilityState={focused ? { selected: true } : {}}
-              style={[styles.segment, focused && styles.segmentActive]}
-            >
-              {options.tabBarIcon?.({ focused, color, size: 18 })}
-              <Text style={[styles.label, { color }]}>{label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+        }}
+      />
     </View>
   );
 }
@@ -75,34 +69,18 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  backButton: {
+    width: 24,
+    alignItems: "flex-start",
+    justifyContent: "center",
   },
   headerTitle: {
+    flex: 1,
     color: colors.text,
     fontSize: 17,
     fontWeight: "700",
-  },
-  segmentGroup: {
-    flexDirection: "row",
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 12,
-    padding: 4,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    borderRadius: 9,
-  },
-  segmentActive: {
-    backgroundColor: colors.primary,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: "600",
   },
 });

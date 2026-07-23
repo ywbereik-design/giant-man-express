@@ -2,14 +2,33 @@ import React, { useState } from "react";
 import { LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { NavigatorScreenParams } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { WelcomeScreen } from "../screens/driver/WelcomeScreen";
 import { HomeScreen } from "../screens/driver/HomeScreen";
 import { DriverJobsScreen } from "../screens/driver/JobsScreen";
 import { HistoryScreen } from "../screens/driver/HistoryScreen";
 import { DriverTopTabBar } from "./DriverTopTabBar";
 import { DriverTabBarHeightContext } from "./DriverTabBarHeightContext";
+import { LogoutButton } from "./LogoutButton";
+import { colors } from "../theme/theme";
 
-const Tab = createBottomTabNavigator();
+export type DriverTabParamList = {
+  Home: undefined;
+  Jobs: undefined;
+  History: undefined;
+};
+
+export type DriverStackParamList = {
+  Welcome: undefined;
+  // Lets WelcomeScreen's cards deep-link straight into a specific tab, e.g.
+  // navigation.navigate("Main", { screen: "Jobs" }).
+  Main: NavigatorScreenParams<DriverTabParamList> | undefined;
+};
+
+const Tab = createBottomTabNavigator<DriverTabParamList>();
+const Stack = createNativeStackNavigator<DriverStackParamList>();
 
 // The bar's own content height (title/logout row + segmented tabs row +
 // padding), excluding the device's safe-area top inset — computed from
@@ -19,7 +38,9 @@ const Tab = createBottomTabNavigator();
 // via useSafeAreaInsets, which — unlike onLayout here — is reliable.
 const TOP_BAR_CONTENT_HEIGHT = 92;
 
-export function DriverNavigator() {
+// The tab bar itself — Home/Jobs/History behind the top segmented control.
+// Landed on from WelcomeScreen, not shown automatically on login.
+function DriverTabs() {
   const insets = useSafeAreaInsets();
   const [tabBarHeight, setTabBarHeight] = useState(TOP_BAR_CONTENT_HEIGHT + insets.top);
 
@@ -73,5 +94,27 @@ export function DriverNavigator() {
         />
       </Tab.Navigator>
     </DriverTabBarHeightContext.Provider>
+  );
+}
+
+// Welcome is the landing hub right after login — the driver picks where to
+// go from there rather than being dropped straight into a tab. Main (the
+// tab bar) is pushed on top of it, so the hardware/back gesture from any
+// tab returns here rather than exiting or re-triggering auth.
+export function DriverNavigator() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.surface },
+        headerTintColor: colors.text,
+      }}
+    >
+      <Stack.Screen
+        name="Welcome"
+        component={WelcomeScreen}
+        options={{ title: "Giant Man Express", headerRight: () => <LogoutButton /> }}
+      />
+      <Stack.Screen name="Main" component={DriverTabs} options={{ headerShown: false }} />
+    </Stack.Navigator>
   );
 }

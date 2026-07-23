@@ -70,8 +70,12 @@ drivers using it via Expo Go, without needing the Play Store yet.
 2. I'll run `eas login` — same pattern as Vercel, you complete the browser
    confirmation, then tell me you're done.
 3. I'll run `eas build:configure` to link this project to your account
-   (this writes a `projectId` into `mobile/app.json` — normal, not a
-   secret).
+   (this adds a `projectId` under `extra.eas` in `mobile/app.config.js` —
+   normal, not a secret. The mobile app switched from static `app.json` to
+   `app.config.js` so the Google Maps API key could be pulled from `.env`;
+   EAS CLI can't auto-write into a JS config file the way it does with
+   plain JSON, so I may need to add the projectId by hand instead of it
+   happening automatically).
 4. I'll run `eas build --platform android --profile preview` first — this
    produces a plain `.apk` you can sideload straight onto your own Android
    phone (no Play Store needed) to sanity-check the real build before
