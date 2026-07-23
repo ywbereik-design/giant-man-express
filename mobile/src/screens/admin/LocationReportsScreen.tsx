@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver, DriverLocationDetail } from "../../api/types";
 import { Badge, Card, CenteredSpinner, ErrorText, SectionTitle } from "../../components/ui";
+import { DriverLiveMap } from "../../components/DriverLiveMap";
 import { colors, spacing } from "../../theme/theme";
 
 export function LocationReportsScreen() {
@@ -96,16 +97,8 @@ export function LocationReportsScreen() {
                         </Text>
                       ))
                     )}
-                    <Text style={styles.sectionLabel}>Route ({detail.route.length} points)</Text>
-                    {detail.route.length === 0 ? (
-                      <Text style={styles.meta}>No location pings yet today.</Text>
-                    ) : (
-                      detail.route.map((p, i) => (
-                        <Text key={i} style={styles.routePoint}>
-                          {new Date(p.recordedAt).toLocaleTimeString("en-CA")} — {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                        </Text>
-                      ))
-                    )}
+                    <Text style={styles.sectionLabel}>Live Map</Text>
+                    <DriverLiveMap driverId={item.id} />
                   </>
                 )}
               </View>
@@ -133,5 +126,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
   },
-  routePoint: { color: colors.textMuted, fontSize: 12, marginTop: 1 },
 });

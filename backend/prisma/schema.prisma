@@ -99,6 +99,14 @@ model Job {
   onTheWayAt  DateTime?
   deliveredAt DateTime?
 
+  // Proof-of-pickup / proof-of-delivery photos, captured by the driver at
+  // the ARRIVED->PICKED_UP and ON_THE_WAY->DELIVERED transitions (same
+  // compressed-JPEG-data-URL pattern as TimeEntry.clockInPhoto). Nullable
+  // here even though the API requires one on those transitions going
+  // forward — historical/in-flight jobs predate this field.
+  pickupPhoto   String?
+  deliveryPhoto String?
+
   invoiceLineItems InvoiceLineItem[]
 
   @@index([driverId])

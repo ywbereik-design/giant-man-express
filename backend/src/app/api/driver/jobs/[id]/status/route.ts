@@ -3,11 +3,24 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireActiveDriver } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
-import { DRIVER_ALLOWED_TRANSITIONS, JobStatus } from "@/lib/constants";
+import { DRIVER_ALLOWED_TRANSITIONS, JobStatus, MAX_SELFIE_DATA_URL_LENGTH } from "@/lib/constants";
 
 const schema = z.object({
   status: z.enum(["ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY", "DELIVERED"]),
+  photo: z
+    .string()
+    .startsWith("data:image/", "photo must be an image data URL")
+    .max(MAX_SELFIE_DATA_URL_LENGTH, "Photo is too large")
+    .optional(),
 });
+
+// Proof-of-pickup and proof-of-delivery photos are required on these two
+// specific transitions — mirrors the clock-in selfie requirement, but only
+// on the stages that actually hand off physical goods.
+const PHOTO_REQUIRED_ON: Partial<Record<JobStatus, "pickupPhoto" | "deliveryPhoto">> = {
+  PICKED_UP: "pickupPhoto",
+  DELIVERED: "deliveryPhoto",
+};
 
 const TIMESTAMP_FIELD: Record<string, string> = {
   ACCEPTED: "acceptedAt",
@@ -38,11 +51,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
   }
 
+  const photoField = PHOTO_REQUIRED_ON[nextStatus];
+  if (photoField && !body.data.photo) {
+    const label = photoField === "pickupPhoto" ? "pickup" : "delivery";
+    return Response.json({ error: `A ${label} photo is required` }, { status: 400 });
+  }
+
   const updated = await prisma.job.update({
     where: { id: params.id },
     data: {
       status: nextStatus,
       [TIMESTAMP_FIELD[nextStatus]]: new Date(),
+      ...(photoField ? { [photoField]: body.data.photo } : {}),
     },
     include: { jobType: true, business: true, dropoffStops: { orderBy: { sequence: "asc" } } },
   });

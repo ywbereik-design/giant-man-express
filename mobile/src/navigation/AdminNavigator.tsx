@@ -6,6 +6,7 @@ import { JobTypesScreen } from "../screens/admin/JobTypesScreen";
 import { BusinessesScreen } from "../screens/admin/BusinessesScreen";
 import { AdminJobsScreen } from "../screens/admin/JobsScreen";
 import { ReportsScreen } from "../screens/admin/ReportsScreen";
+import { HoursByBusinessScreen } from "../screens/admin/HoursByBusinessScreen";
 import { LocationReportsScreen } from "../screens/admin/LocationReportsScreen";
 import { SelfieReportsScreen } from "../screens/admin/SelfieReportsScreen";
 import { InvoicesScreen } from "../screens/admin/InvoicesScreen";
@@ -20,6 +21,7 @@ export type AdminStackParamList = {
   Businesses: undefined;
   Jobs: undefined;
   Reports: undefined;
+  HoursByBusiness: undefined;
   LocationReports: undefined;
   SelfieReports: undefined;
   Invoices: undefined;
@@ -44,6 +46,7 @@ export function AdminNavigator() {
       <Stack.Screen name="Businesses" component={BusinessesScreen} options={{ title: "Businesses" }} />
       <Stack.Screen name="Jobs" component={AdminJobsScreen} options={{ title: "Jobs & Dispatch" }} />
       <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: "Hours Reports" }} />
+      <Stack.Screen name="HoursByBusiness" component={HoursByBusinessScreen} options={{ title: "Hours by Client" }} />
       <Stack.Screen name="LocationReports" component={LocationReportsScreen} options={{ title: "Location Reports" }} />
       <Stack.Screen name="SelfieReports" component={SelfieReportsScreen} options={{ title: "Selfie Reports" }} />
       <Stack.Screen name="Invoices" component={InvoicesScreen} options={{ title: "Invoices" }} />

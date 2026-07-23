@@ -3,11 +3,12 @@ import { View, Pressable, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing } from "../theme/theme";
 
-export type DriverTabKey = "Home" | "Jobs" | "History";
+export type DriverTabKey = "Home" | "Jobs" | "Location" | "History";
 
 const TABS: { key: DriverTabKey; label: string; icon: keyof typeof Ionicons.glyphMap; iconOutline: keyof typeof Ionicons.glyphMap }[] = [
   { key: "Home", label: "Home", icon: "home", iconOutline: "home-outline" },
   { key: "Jobs", label: "Jobs", icon: "briefcase", iconOutline: "briefcase-outline" },
+  { key: "Location", label: "Location", icon: "map", iconOutline: "map-outline" },
   { key: "History", label: "History", icon: "time", iconOutline: "time-outline" },
 ];
 

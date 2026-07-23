@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from "react";
-import { FlatList, Image, Modal, Pressable, Text, View, StyleSheet } from "react-native";
+import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver, TimeEntry } from "../../api/types";
 import { Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
+import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { colors, spacing } from "../../theme/theme";
 
 export function SelfieReportsScreen() {
@@ -14,7 +15,6 @@ export function SelfieReportsScreen() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const loadDrivers = useCallback(async () => {
     try {
@@ -50,72 +50,61 @@ export function SelfieReportsScreen() {
   if (initialLoading) return <CenteredSpinner />;
 
   return (
-    <>
-      <FlatList
-        style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={{ padding: spacing.md }}
-        data={driverId ? entries : []}
-        keyExtractor={(e) => e.id}
-        ListHeaderComponent={
-          <View>
-            <SectionTitle>Selfie Reports</SectionTitle>
-            <Text style={styles.hint}>
-              Every clock-in selfie for a driver, by the day it was taken.
-            </Text>
-            <Card>
-              <Label>Driver</Label>
-              <ChipSelect
-                options={drivers.map((d) => ({ id: d.id, label: d.name }))}
-                selectedId={driverId}
-                onSelect={selectDriver}
-              />
-            </Card>
-            <ErrorText>{error}</ErrorText>
-            {entriesLoading && <CenteredSpinner />}
-          </View>
-        }
-        ListEmptyComponent={
-          !entriesLoading && driverId ? (
-            <Text style={styles.empty}>No shifts recorded for this driver yet.</Text>
-          ) : !entriesLoading && !driverId ? (
-            <Text style={styles.empty}>Choose a driver to see their selfie history.</Text>
-          ) : null
-        }
-        renderItem={({ item }) => (
+    <FlatList
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={{ padding: spacing.md }}
+      data={driverId ? entries : []}
+      keyExtractor={(e) => e.id}
+      ListHeaderComponent={
+        <View>
+          <SectionTitle>Selfie Reports</SectionTitle>
+          <Text style={styles.hint}>Every clock-in selfie for a driver, by the day it was taken.</Text>
           <Card>
-            <View style={styles.row}>
-              {item.clockInPhoto ? (
-                <Pressable onPress={() => setViewingPhoto(item.clockInPhoto ?? null)}>
-                  <Image source={{ uri: item.clockInPhoto }} style={styles.thumbnail} />
-                </Pressable>
-              ) : (
-                <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
-                  <Text style={styles.thumbnailEmptyText}>N/A</Text>
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.date}>
-                  {new Date(item.clockInAt).toLocaleDateString("en-CA", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </Text>
-                <Text style={styles.meta}>
-                  Clocked in {new Date(item.clockInAt).toLocaleTimeString("en-CA")}
-                  {item.clockOutAt ? ` – out ${new Date(item.clockOutAt).toLocaleTimeString("en-CA")}` : " (in progress)"}
-                </Text>
-              </View>
-            </View>
+            <Label>Driver</Label>
+            <ChipSelect
+              options={drivers.map((d) => ({ id: d.id, label: d.name }))}
+              selectedId={driverId}
+              onSelect={selectDriver}
+            />
           </Card>
-        )}
-      />
-      <Modal visible={!!viewingPhoto} transparent animationType="fade" onRequestClose={() => setViewingPhoto(null)}>
-        <Pressable style={styles.viewerBackdrop} onPress={() => setViewingPhoto(null)}>
-          {viewingPhoto && <Image source={{ uri: viewingPhoto }} style={styles.viewerImage} resizeMode="contain" />}
-        </Pressable>
-      </Modal>
-    </>
+          <ErrorText>{error}</ErrorText>
+          {entriesLoading && <CenteredSpinner />}
+        </View>
+      }
+      ListEmptyComponent={
+        !entriesLoading && driverId ? (
+          <Text style={styles.empty}>No shifts recorded for this driver yet.</Text>
+        ) : !entriesLoading && !driverId ? (
+          <Text style={styles.empty}>Choose a driver to see their selfie history.</Text>
+        ) : null
+      }
+      renderItem={({ item }) => (
+        <Card>
+          <View style={styles.row}>
+            {item.clockInPhoto ? (
+              <PhotoThumbnail uri={item.clockInPhoto} />
+            ) : (
+              <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
+                <Text style={styles.thumbnailEmptyText}>N/A</Text>
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.date}>
+                {new Date(item.clockInAt).toLocaleDateString("en-CA", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </Text>
+              <Text style={styles.meta}>
+                Clocked in {new Date(item.clockInAt).toLocaleTimeString("en-CA")}
+                {item.clockOutAt ? ` – out ${new Date(item.clockOutAt).toLocaleTimeString("en-CA")}` : " (in progress)"}
+              </Text>
+            </View>
+          </View>
+        </Card>
+      )}
+    />
   );
 }
 
@@ -128,11 +117,4 @@ const styles = StyleSheet.create({
   thumbnail: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.surfaceAlt },
   thumbnailEmpty: { alignItems: "center", justifyContent: "center" },
   thumbnailEmptyText: { color: colors.textMuted, fontSize: 11 },
-  viewerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  viewerImage: { width: "100%", height: "80%" },
 });

@@ -6,11 +6,12 @@ import { colors, spacing } from "../../theme/theme";
 import type { DriverStackParamList } from "../../navigation/DriverNavigator";
 import { DriverTabSegmentBar, DriverTabKey } from "../../navigation/DriverTabSegmentBar";
 
-type Action = { tab: "Home" | "Jobs" | "History"; title: string; subtitle: string };
+type Action = { tab: DriverTabKey; title: string; subtitle: string };
 
 const ACTIONS: Action[] = [
   { tab: "Home", title: "Go to Dashboard / Clock In", subtitle: "Clock in, clock out, and track your shift" },
   { tab: "Jobs", title: "View Assigned Jobs", subtitle: "See and update your delivery jobs" },
+  { tab: "Location", title: "View Route", subtitle: "See your live route and ETA to the next stop" },
   { tab: "History", title: "Check History", subtitle: "Review your past shifts" },
 ];
 

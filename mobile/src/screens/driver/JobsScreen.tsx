@@ -1,12 +1,16 @@
 import React, { useCallback, useState } from "react";
 import { FlatList, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../../api/client";
 import { Job, JobStatus } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { colors, spacing } from "../../theme/theme";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 import { DriverRouteMap } from "../../components/DriverRouteMap";
+import { routeDestination } from "../../lib/routeDestination";
+import { capturePhoto } from "../../lib/capturePhoto";
+import * as ImagePicker from "expo-image-picker";
 
 const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = {
   ASSIGNED: "info",
@@ -35,21 +39,13 @@ const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
   { field: "deliveredAt", label: "Delivered" },
 ];
 
-// Where the live route map should point for a job currently in progress:
-// the pickup before the driver has arrived there, otherwise the next
-// not-yet-reached delivery stop. Null for jobs that aren't actively being
-// worked (not yet accepted, or already finished) or have no address to route to.
-function routeDestination(job: Job): { address: string; label: string } | null {
-  if (job.status === "ACCEPTED") {
-    return job.pickupAddress ? { address: job.pickupAddress, label: "Pickup" } : null;
-  }
-  if (job.status === "ARRIVED" || job.status === "PICKED_UP" || job.status === "ON_THE_WAY") {
-    const nextStop = job.dropoffStops[0];
-    if (!nextStop) return null;
-    return { address: nextStop.address, label: job.dropoffStops.length > 1 ? "Next Stop" : "Dropoff" };
-  }
-  return null;
-}
+// Photos are required proof at these two specific transitions — mirrors the
+// clock-in selfie requirement, but with the rear camera (photo of the
+// package/location, not the driver).
+const PHOTO_REQUIRED_ON: Partial<Record<JobStatus, true>> = {
+  PICKED_UP: true,
+  DELIVERED: true,
+};
 
 export function DriverJobsScreen() {
   const tabBarHeight = useDriverTabBarHeight();
@@ -81,9 +77,25 @@ export function DriverJobsScreen() {
     if (!action) return;
     setError(null);
 
+    let photo: string | undefined;
+    if (PHOTO_REQUIRED_ON[action.next]) {
+      try {
+        const captured = await capturePhoto(ImagePicker.CameraType.back);
+        if (!captured) {
+          const label = action.next === "PICKED_UP" ? "pickup" : "delivery";
+          setError(`A ${label} photo is required to continue.`);
+          return;
+        }
+        photo = captured;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not open the camera");
+        return;
+      }
+    }
+
     setUpdatingId(job.id);
     try {
-      await api.patch(`/api/driver/jobs/${job.id}/status`, { status: action.next });
+      await api.patch(`/api/driver/jobs/${job.id}/status`, { status: action.next, photo });
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not update job");
@@ -115,23 +127,35 @@ export function DriverJobsScreen() {
               </View>
               <Text style={styles.title}>{item.title}</Text>
               {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-              {item.pickupAddress && <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>}
+              {item.pickupAddress && (
+                <View style={styles.addressRow}>
+                  <Ionicons name="location" size={13} color={colors.textMuted} />
+                  <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>
+                </View>
+              )}
               {item.dropoffStops.map((stop, i) => (
-                <Text key={stop.id} style={styles.meta}>
-                  {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-                  {stop.address}
-                </Text>
+                <View key={stop.id} style={styles.addressRow}>
+                  <Ionicons name="location" size={13} color={colors.textMuted} />
+                  <Text style={styles.meta}>
+                    {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+                    {stop.address}
+                  </Text>
+                </View>
               ))}
               {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
               {destination && (
                 <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />
               )}
               {reachedStages.length > 0 && (
-                <Text style={styles.meta}>
-                  {reachedStages
-                    .map((s) => `${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA")}`)
-                    .join(" · ")}
-                </Text>
+                <View style={styles.stageRow}>
+                  {reachedStages.map((s) => (
+                    <Badge
+                      key={s.field}
+                      text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
+                      tone="muted"
+                    />
+                  ))}
+                </View>
               )}
               {action && (
                 <View style={{ marginTop: spacing.sm }}>
@@ -155,4 +179,6 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 17, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
+  addressRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
 });

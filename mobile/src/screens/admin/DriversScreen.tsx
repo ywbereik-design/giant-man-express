@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from "react";
-import { FlatList, Image, Modal, Pressable, Text, View, StyleSheet } from "react-native";
+import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
+import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { colors, spacing } from "../../theme/theme";
 
 const JOB_STATUS_LABEL: Record<string, string> = {
@@ -35,7 +36,6 @@ export function DriversScreen() {
   const [editPin, setEditPin] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
-  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -133,7 +133,6 @@ export function DriversScreen() {
   if (initialLoading) return <CenteredSpinner />;
 
   return (
-    <>
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
@@ -217,12 +216,12 @@ export function DriversScreen() {
               </Text>
             )}
             {item.clockedIn && item.clockInPhoto && (
-              <Pressable onPress={() => setViewingPhoto(item.clockInPhoto ?? null)} style={styles.photoRow}>
-                <Image source={{ uri: item.clockInPhoto }} style={styles.thumbnail} />
+              <View style={styles.photoRow}>
+                <PhotoThumbnail uri={item.clockInPhoto} size={44} />
                 <Text style={styles.meta}>
                   Clocked in {item.clockInAt ? new Date(item.clockInAt).toLocaleTimeString("en-CA") : ""}
                 </Text>
-              </Pressable>
+              </View>
             )}
             {item.clockedIn && !item.clockInPhoto && item.clockInPhotoExpired && (
               <Text style={styles.meta}>Shift photo expired (clocked in over 12h ago)</Text>
@@ -246,12 +245,6 @@ export function DriversScreen() {
         );
       }}
     />
-    <Modal visible={!!viewingPhoto} transparent animationType="fade" onRequestClose={() => setViewingPhoto(null)}>
-      <Pressable style={styles.viewerBackdrop} onPress={() => setViewingPhoto(null)}>
-        {viewingPhoto && <Image source={{ uri: viewingPhoto }} style={styles.viewerImage} resizeMode="contain" />}
-      </Pressable>
-    </Modal>
-    </>
   );
 }
 
@@ -262,12 +255,4 @@ const styles = StyleSheet.create({
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
   jobRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
   photoRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
-  thumbnail: { width: 44, height: 44, borderRadius: 8, backgroundColor: colors.surfaceAlt },
-  viewerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  viewerImage: { width: "100%", height: "80%" },
 });

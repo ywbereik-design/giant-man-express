@@ -11,6 +11,7 @@ type MenuItem = { key: keyof DispatchStackParamList; title: string; subtitle: st
 const ITEMS: MenuItem[] = [
   { key: "Jobs", title: "Jobs & Dispatch", subtitle: "Create and assign jobs, track status" },
   { key: "Drivers", title: "Drivers", subtitle: "Monitor who's active and currently clocked in" },
+  { key: "LocationReports", title: "Live Map", subtitle: "See where drivers are and their route" },
   { key: "SelfieReports", title: "Selfie Reports", subtitle: "Every clock-in selfie, by driver and day" },
 ];
 
@@ -34,8 +35,11 @@ export function DispatchDashboardScreen({
         </Pressable>
       ))}
 
-      <Text style={styles.groupTitle}>Account</Text>
-      <ChangePasswordCard />
+      <View style={styles.group}>
+        <Text style={styles.groupTitle}>Account</Text>
+        <View style={styles.groupDivider} />
+        <ChangePasswordCard />
+      </View>
     </ScrollView>
   );
 }
@@ -44,6 +48,7 @@ const styles = StyleSheet.create({
   greeting: { color: colors.text, fontSize: 22, fontWeight: "700" },
   company: { color: colors.textMuted, marginBottom: spacing.xs },
   roleNote: { color: colors.info, fontSize: 12, marginBottom: spacing.lg },
+  group: { marginTop: spacing.lg },
   groupTitle: {
     color: colors.textMuted,
     fontSize: 12,
@@ -51,7 +56,11 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: spacing.sm,
-    marginTop: spacing.sm,
+  },
+  groupDivider: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginBottom: spacing.sm,
   },
   item: {
     backgroundColor: colors.surface,

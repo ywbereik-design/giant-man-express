@@ -4,6 +4,7 @@ import { DispatchDashboardScreen } from "../screens/dispatch/DispatchDashboardSc
 import { DriversScreen } from "../screens/admin/DriversScreen";
 import { AdminJobsScreen } from "../screens/admin/JobsScreen";
 import { SelfieReportsScreen } from "../screens/admin/SelfieReportsScreen";
+import { LocationReportsScreen } from "../screens/admin/LocationReportsScreen";
 import { LogoutButton } from "./LogoutButton";
 import { colors } from "../theme/theme";
 
@@ -12,6 +13,7 @@ export type DispatchStackParamList = {
   Drivers: undefined;
   Jobs: undefined;
   SelfieReports: undefined;
+  LocationReports: undefined;
 };
 
 const Stack = createNativeStackNavigator<DispatchStackParamList>();
@@ -30,6 +32,7 @@ export function DispatchNavigator() {
       <Stack.Screen name="Drivers" component={DriversScreen} options={{ title: "Drivers" }} />
       <Stack.Screen name="Jobs" component={AdminJobsScreen} options={{ title: "Jobs & Dispatch" }} />
       <Stack.Screen name="SelfieReports" component={SelfieReportsScreen} options={{ title: "Selfie Reports" }} />
+      <Stack.Screen name="LocationReports" component={LocationReportsScreen} options={{ title: "Live Map" }} />
     </Stack.Navigator>
   );
 }

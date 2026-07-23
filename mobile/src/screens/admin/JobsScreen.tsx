@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
+import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { colors, spacing } from "../../theme/theme";
 
 const STATUS_TONE: Record<Job["status"], "info" | "success" | "danger" | "muted"> = {
@@ -215,6 +217,7 @@ export function AdminJobsScreen() {
             <ErrorText>{error}</ErrorText>
             <Button title="Assign Job" onPress={createJob} loading={saving} />
           </Card>
+          <View style={styles.divider} />
           <SectionTitle>Jobs</SectionTitle>
           <ChipSelect
             options={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
@@ -235,19 +238,47 @@ export function AdminJobsScreen() {
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
             {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-            {item.pickupAddress && <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>}
+            {item.pickupAddress && (
+              <View style={styles.addressRow}>
+                <Ionicons name="location" size={13} color={colors.textMuted} />
+                <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>
+              </View>
+            )}
             {item.dropoffStops.map((stop, i) => (
-              <Text key={stop.id} style={styles.meta}>
-                {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-                {stop.address}
-              </Text>
+              <View key={stop.id} style={styles.addressRow}>
+                <Ionicons name="location" size={13} color={colors.textMuted} />
+                <Text style={styles.meta}>
+                  {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+                  {stop.address}
+                </Text>
+              </View>
             ))}
             {reachedStages.length > 0 && (
-              <Text style={styles.meta}>
-                {reachedStages
-                  .map((s) => `${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA")}`)
-                  .join(" · ")}
-              </Text>
+              <View style={styles.stageRow}>
+                {reachedStages.map((s) => (
+                  <Badge
+                    key={s.field}
+                    text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
+                    tone="muted"
+                  />
+                ))}
+              </View>
+            )}
+            {(item.pickupPhoto || item.deliveryPhoto) && (
+              <View style={styles.photoRow}>
+                {item.pickupPhoto && (
+                  <View style={styles.photoCol}>
+                    <Text style={styles.photoLabel}>Pickup</Text>
+                    <PhotoThumbnail uri={item.pickupPhoto} />
+                  </View>
+                )}
+                {item.deliveryPhoto && (
+                  <View style={styles.photoCol}>
+                    <Text style={styles.photoLabel}>Delivery</Text>
+                    <PhotoThumbnail uri={item.deliveryPhoto} />
+                  </View>
+                )}
+              </View>
             )}
             {item.status !== "DELIVERED" && item.status !== "CANCELLED" && (
               <View style={{ marginTop: spacing.sm }}>
@@ -274,4 +305,10 @@ const styles = StyleSheet.create({
   stopRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   removeStop: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   removeStopText: { color: colors.danger, fontSize: 13, fontWeight: "600" },
+  photoRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
+  photoCol: { alignItems: "flex-start" },
+  photoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginBottom: 4 },
+  divider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.lg, marginBottom: spacing.md },
+  addressRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
 });

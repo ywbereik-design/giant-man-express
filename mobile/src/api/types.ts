@@ -92,6 +92,11 @@ export interface Job {
   pickedUpAt: string | null;
   onTheWayAt: string | null;
   deliveredAt: string | null;
+  // Proof-of-pickup / proof-of-delivery photos, captured by the driver at
+  // the ARRIVED->PICKED_UP and ON_THE_WAY->DELIVERED transitions. Null for
+  // jobs that haven't reached that stage yet, or predate this feature.
+  pickupPhoto: string | null;
+  deliveryPhoto: string | null;
   jobType: JobType;
   driver?: Driver;
   business?: Business | null;
@@ -145,4 +150,19 @@ export interface StaffAccount {
   role: StaffRole;
   active: boolean;
   createdAt: string;
+}
+
+export interface NotClockedInDriver {
+  id: string;
+  name: string;
+  employeeCode: string;
+}
+
+export interface HoursByBusinessRow {
+  businessId: string;
+  businessName: string;
+  driverId: string;
+  driverName: string;
+  jobCount: number;
+  totalHours: number;
 }
