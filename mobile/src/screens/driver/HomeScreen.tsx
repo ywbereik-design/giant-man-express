@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Text, View, StyleSheet, RefreshControl, ScrollView } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { api, ApiError } from "../../api/client";
 import { TimeEntry } from "../../api/types";
@@ -82,9 +83,17 @@ export function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // useFocusEffect, not a plain useEffect, so this tab's clock-in status
+  // re-syncs whenever the driver navigates back to it — this screen stays
+  // mounted (tab navigators keep sibling screens alive), so a plain effect
+  // would only run once and could show a stale "Clocked In"/"Clocked Out"
+  // state after the shift changed elsewhere (another device, an admin
+  // action) while the driver was on a different tab.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   async function onRefresh() {
     setRefreshing(true);

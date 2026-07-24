@@ -32,6 +32,10 @@ export function DriverLiveMap({ driverId }: Props) {
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noActiveJob, setNoActiveJob] = useState(false);
+  // A job's destination address is typically static for the whole delivery —
+  // skip re-geocoding (a paid API call) on every 25s poll when it hasn't
+  // actually changed since the last one.
+  const lastGeocodedAddress = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,11 +61,17 @@ export function DriverLiveMap({ driverId }: Props) {
         if (dest) {
           setNoActiveJob(false);
           setDestinationLabel(dest.label);
-          const coords = await geocodeAddress(dest.address);
-          if (!cancelled && coords) setDestination(coords);
+          if (dest.address !== lastGeocodedAddress.current) {
+            const coords = await geocodeAddress(dest.address);
+            if (!cancelled && coords) {
+              lastGeocodedAddress.current = dest.address;
+              setDestination(coords);
+            }
+          }
         } else {
           setNoActiveJob(true);
           setDestination(null);
+          lastGeocodedAddress.current = null;
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof ApiError ? e.message : "Could not load this driver's location");

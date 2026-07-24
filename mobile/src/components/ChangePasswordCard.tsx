@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { api, ApiError } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { Button, Card, ErrorText, FieldInput, Label } from "./ui";
 import { colors, spacing } from "../theme/theme";
 
 export function ChangePasswordCard() {
+  const { updateToken } = useAuth();
   const [open, setOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -43,7 +45,15 @@ export function ChangePasswordCard() {
     }
     setSaving(true);
     try {
-      await api.patch("/api/account/password", { currentPassword, newPassword });
+      // The server bumps this account's tokenVersion on a successful change,
+      // which invalidates every previously-issued token — including the one
+      // this very request used — so the fresh token it returns must replace
+      // the stored one, or the next request would fail as if logged out.
+      const res = await api.patch<{ ok: true; token: string }>("/api/account/password", {
+        currentPassword,
+        newPassword,
+      });
+      await updateToken(res.token);
       reset();
       setOpen(false);
       setSuccess(true);
@@ -73,7 +83,7 @@ export function ChangePasswordCard() {
       <FieldInput value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry autoCapitalize="none" autoCorrect={false} />
       <ErrorText>{error}</ErrorText>
       <Button title="Save New Password" onPress={submit} loading={saving} />
-      <Button title="Cancel" variant="secondary" onPress={toggleOpen} />
+      <Button title="Cancel" variant="secondary" onPress={toggleOpen} disabled={saving} />
     </Card>
   );
 }

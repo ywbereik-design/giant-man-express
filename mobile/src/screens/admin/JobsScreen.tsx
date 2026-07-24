@@ -7,17 +7,8 @@ import { Business, Driver, Job, JobType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
+import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
 import { colors, spacing } from "../../theme/theme";
-
-const STATUS_TONE: Record<Job["status"], "info" | "success" | "danger" | "muted"> = {
-  ASSIGNED: "info",
-  ACCEPTED: "info",
-  ARRIVED: "info",
-  PICKED_UP: "info",
-  ON_THE_WAY: "info",
-  DELIVERED: "success",
-  CANCELLED: "muted",
-};
 
 const FILTERS = [
   { id: "ACTIVE", label: "Active" },
@@ -26,16 +17,6 @@ const FILTERS = [
   { id: "CANCELLED", label: "Cancelled" },
 ] as const;
 type FilterId = (typeof FILTERS)[number]["id"];
-
-// Stage timestamps shown on the card so far, in order — only the ones the
-// job has actually reached are rendered.
-const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
-  { field: "acceptedAt", label: "Accepted" },
-  { field: "arrivedAt", label: "Arrived" },
-  { field: "pickedUpAt", label: "Picked up" },
-  { field: "onTheWayAt", label: "On the way" },
-  { field: "deliveredAt", label: "Delivered" },
-];
 
 const ACTIVE_STATUSES: Job["status"][] = ["ASSIGNED", "ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY"];
 
@@ -226,7 +207,7 @@ export function AdminJobsScreen() {
           />
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No jobs in this view.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No jobs in this view.</Text> : null}
       renderItem={({ item }) => {
         const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
         return (

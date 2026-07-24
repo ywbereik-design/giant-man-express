@@ -6,6 +6,7 @@ import { StaffAccount, StaffRole } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
+import { isValidEmail } from "../../lib/validation";
 import { colors, spacing } from "../../theme/theme";
 
 const ROLE_OPTIONS: { id: StaffRole; label: string }[] = [
@@ -53,6 +54,10 @@ export function StaffScreen() {
     setError(null);
     if (!name.trim() || !email.trim()) {
       setError("Name and email are required");
+      return;
+    }
+    if (!isValidEmail(email.trim())) {
+      setError("Enter a valid email address");
       return;
     }
     if (password.length < 8) {
@@ -169,7 +174,7 @@ export function StaffScreen() {
           <SectionTitle>Staff Accounts</SectionTitle>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No staff accounts yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No staff accounts yet.</Text> : null}
       renderItem={({ item }) => {
         const isSelf = item.id === session?.id;
 

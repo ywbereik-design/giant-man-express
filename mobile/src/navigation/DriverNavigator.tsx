@@ -124,7 +124,12 @@ export function DriverNavigator() {
       <Stack.Screen
         name="Welcome"
         component={WelcomeScreen}
-        options={{ title: "Giant Man Express", headerRight: () => <LogoutButton /> }}
+        options={{
+          title: "Giant Man Express",
+          headerRight: () => (
+            <LogoutButton warningMessage="If you're still clocked in, this won't end your shift — clock out first if you're done for the day." />
+          ),
+        }}
       />
       <Stack.Screen name="Main" component={DriverTabs} options={{ headerShown: false }} />
     </Stack.Navigator>

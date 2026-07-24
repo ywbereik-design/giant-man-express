@@ -106,7 +106,7 @@ export function ReportsScreen() {
           <SectionTitle>Generated Reports</SectionTitle>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No reports generated yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No reports generated yet.</Text> : null}
       renderItem={({ item }) => (
         <Card>
           <Text style={styles.number}>{item.reportNumber}</Text>

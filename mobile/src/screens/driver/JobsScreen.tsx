@@ -10,17 +10,8 @@ import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContex
 import { DriverRouteMap } from "../../components/DriverRouteMap";
 import { routeDestination } from "../../lib/routeDestination";
 import { capturePhoto } from "../../lib/capturePhoto";
+import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
 import * as ImagePicker from "expo-image-picker";
-
-const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = {
-  ASSIGNED: "info",
-  ACCEPTED: "info",
-  ARRIVED: "info",
-  PICKED_UP: "info",
-  ON_THE_WAY: "info",
-  DELIVERED: "success",
-  CANCELLED: "muted",
-};
 
 const NEXT_ACTION: Partial<Record<JobStatus, { label: string; next: JobStatus }>> = {
   ASSIGNED: { label: "Accept Job", next: "ACCEPTED" },
@@ -29,15 +20,6 @@ const NEXT_ACTION: Partial<Record<JobStatus, { label: string; next: JobStatus }>
   PICKED_UP: { label: "On the Way", next: "ON_THE_WAY" },
   ON_THE_WAY: { label: "Delivered", next: "DELIVERED" },
 };
-
-// Stage timestamps shown on the card so far, in order — only the ones the
-// job has actually reached are rendered.
-const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
-  { field: "arrivedAt", label: "Arrived" },
-  { field: "pickedUpAt", label: "Picked up" },
-  { field: "onTheWayAt", label: "On the way" },
-  { field: "deliveredAt", label: "Delivered" },
-];
 
 // Photos are required proof at these two specific transitions — mirrors the
 // clock-in selfie requirement, but with the rear camera (photo of the
@@ -114,7 +96,7 @@ export function DriverJobsScreen() {
         keyExtractor={(j) => j.id}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={async () => { setLoading(true); await load(); setLoading(false); }} tintColor={colors.primary} />}
         ListHeaderComponent={<ErrorText>{error}</ErrorText>}
-        ListEmptyComponent={<Text style={styles.empty}>No jobs assigned right now.</Text>}
+        ListEmptyComponent={!error ? <Text style={styles.empty}>No jobs assigned right now.</Text> : null}
         renderItem={({ item }) => {
           const action = NEXT_ACTION[item.status];
           const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);

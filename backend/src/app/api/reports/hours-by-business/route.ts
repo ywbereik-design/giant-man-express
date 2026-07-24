@@ -59,9 +59,22 @@ export async function GET(req: NextRequest) {
     { businessId: string; businessName: string; driverId: string; driverName: string; jobCount: number; totalHours: number }
   >();
 
+  // Jobs missing pickedUpAt/deliveredAt, or with deliveredAt before
+  // pickedUpAt (possible on historical data from before jobs/[id] PATCH
+  // started backfilling out-of-order stage timestamps), are excluded rather
+  // than silently corrupting totalHours with a negative value —
+  // skippedCount tells the caller some jobs in range weren't counted.
+  let skippedCount = 0;
   for (const job of jobs) {
-    if (!job.businessId || !job.business || !job.pickedUpAt || !job.deliveredAt) continue;
+    if (!job.businessId || !job.business || !job.pickedUpAt || !job.deliveredAt) {
+      skippedCount++;
+      continue;
+    }
     const hours = (job.deliveredAt.getTime() - job.pickedUpAt.getTime()) / 3600000;
+    if (hours < 0) {
+      skippedCount++;
+      continue;
+    }
     const key = `${job.businessId}:${job.driverId}`;
     const existing = groups.get(key);
     if (existing) {
@@ -81,5 +94,5 @@ export async function GET(req: NextRequest) {
 
   const rows = Array.from(groups.values()).sort((a, b) => a.businessName.localeCompare(b.businessName));
 
-  return Response.json({ rows, periodStart, periodEnd });
+  return Response.json({ rows, periodStart, periodEnd, skippedCount });
 }

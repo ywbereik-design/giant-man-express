@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { api, ApiError } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { Button, Card, ErrorText, FieldInput, Label } from "./ui";
 import { colors, spacing } from "../theme/theme";
 
 export function ChangePinCard() {
+  const { updateToken } = useAuth();
   const [open, setOpen] = useState(false);
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -33,8 +35,8 @@ export function ChangePinCard() {
       setError("Enter your current and new PIN");
       return;
     }
-    if (newPin.length < 4 || !/^\d+$/.test(newPin)) {
-      setError("New PIN must be at least 4 digits, numbers only");
+    if (newPin.length < 4 || newPin.length > 8 || !/^\d+$/.test(newPin)) {
+      setError("New PIN must be 4-8 digits, numbers only");
       return;
     }
     if (newPin !== confirmPin) {
@@ -43,7 +45,12 @@ export function ChangePinCard() {
     }
     setSaving(true);
     try {
-      await api.patch("/api/account/pin", { currentPin, newPin });
+      // The server bumps this account's tokenVersion on a successful change,
+      // which invalidates every previously-issued token — including the one
+      // this very request used — so the fresh token it returns must replace
+      // the stored one, or the next request would fail as if logged out.
+      const res = await api.patch<{ ok: true; token: string }>("/api/account/pin", { currentPin, newPin });
+      await updateToken(res.token);
       reset();
       setOpen(false);
       setSuccess(true);
@@ -67,13 +74,13 @@ export function ChangePinCard() {
     <Card>
       <Label>Current PIN</Label>
       <FieldInput value={currentPin} onChangeText={setCurrentPin} secureTextEntry keyboardType="number-pad" />
-      <Label>New PIN (4+ digits)</Label>
+      <Label>New PIN (4-8 digits)</Label>
       <FieldInput value={newPin} onChangeText={setNewPin} secureTextEntry keyboardType="number-pad" />
       <Label>Confirm New PIN</Label>
       <FieldInput value={confirmPin} onChangeText={setConfirmPin} secureTextEntry keyboardType="number-pad" />
       <ErrorText>{error}</ErrorText>
       <Button title="Save New PIN" onPress={submit} loading={saving} />
-      <Button title="Cancel" variant="secondary" onPress={toggleOpen} />
+      <Button title="Cancel" variant="secondary" onPress={toggleOpen} disabled={saving} />
     </Card>
   );
 }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { nextNumber } from "@/lib/numbering";
+import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, "ADMIN");
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
     where: businessId ? { businessId } : {},
     orderBy: { generatedAt: "desc" },
     include: { business: { select: { name: true } } },
+    take: 100,
   });
   return Response.json({ invoices });
 }
@@ -83,17 +85,26 @@ export async function POST(req: NextRequest) {
 
   const invoiceNumber = await nextNumber("INV", "invoice");
 
-  const invoice = await prisma.invoice.create({
-    data: {
-      invoiceNumber,
-      businessId,
-      periodStart: start,
-      periodEnd: end,
-      totalAmount,
-      lineItems: { create: lineItemsData },
-    },
-    include: { business: true, lineItems: true },
-  });
+  // The `invoiceLineItems: { none: {} }` filter above handles the common
+  // sequential case; the @@unique([jobId]) constraint on InvoiceLineItem is
+  // the backstop for two concurrent requests both reading the same
+  // "un-invoiced" jobs before either commits — runOrRespond turns the
+  // resulting P2002 into a clean 409 instead of an unhandled 500, and
+  // instead of silently double-billing one of these jobs.
+  const result = await runOrRespond(() =>
+    prisma.invoice.create({
+      data: {
+        invoiceNumber,
+        businessId,
+        periodStart: start,
+        periodEnd: end,
+        totalAmount,
+        lineItems: { create: lineItemsData },
+      },
+      include: { business: true, lineItems: true },
+    })
+  );
+  if (isResponse(result)) return result;
 
-  return Response.json({ invoice }, { status: 201 });
+  return Response.json({ invoice: result }, { status: 201 });
 }

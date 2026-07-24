@@ -72,7 +72,7 @@ export function SelfieReportsScreen() {
         </View>
       }
       ListEmptyComponent={
-        !entriesLoading && driverId ? (
+        error ? null : !entriesLoading && driverId ? (
           <Text style={styles.empty}>No shifts recorded for this driver yet.</Text>
         ) : !entriesLoading && !driverId ? (
           <Text style={styles.empty}>Choose a driver to see their selfie history.</Text>

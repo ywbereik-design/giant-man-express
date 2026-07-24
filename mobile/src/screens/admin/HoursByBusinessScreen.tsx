@@ -103,7 +103,7 @@ export function HoursByBusinessScreen() {
           </Card>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No results — choose a period and load hours.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No results — choose a period and load hours.</Text> : null}
       renderItem={({ item }) => (
         <Card>
           <Text style={styles.business}>{item.businessName}</Text>

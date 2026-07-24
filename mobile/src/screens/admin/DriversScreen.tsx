@@ -56,8 +56,12 @@ export function DriversScreen() {
 
   async function addDriver() {
     setError(null);
-    if (!name.trim() || !employeeCode.trim() || pin.trim().length < 4) {
-      setError("Name, employee code, and a 4+ digit PIN are required");
+    if (!name.trim() || !employeeCode.trim()) {
+      setError("Name and employee code are required");
+      return;
+    }
+    if (pin.trim().length < 4 || pin.trim().length > 8 || !/^\d+$/.test(pin.trim())) {
+      setError("PIN must be 4-8 digits, numbers only");
       return;
     }
     setSaving(true);
@@ -110,8 +114,8 @@ export function DriversScreen() {
       setEditError("Name is required");
       return;
     }
-    if (editPin && editPin.trim().length < 4) {
-      setEditError("New PIN must be at least 4 digits (or leave blank to keep the current PIN)");
+    if (editPin && (editPin.trim().length < 4 || editPin.trim().length > 8 || !/^\d+$/.test(editPin.trim()))) {
+      setEditError("New PIN must be 4-8 digits, numbers only (or leave blank to keep the current PIN)");
       return;
     }
     setEditSaving(true);
@@ -160,7 +164,7 @@ export function DriversScreen() {
           <SectionTitle>Drivers</SectionTitle>
         )
       }
-      ListEmptyComponent={<Text style={styles.empty}>No drivers yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No drivers yet.</Text> : null}
       renderItem={({ item }) => {
         if (canManage && editingId === item.id) {
           return (

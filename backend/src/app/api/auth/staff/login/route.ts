@@ -37,6 +37,6 @@ export async function POST(req: NextRequest) {
 
   await clearAttempts(key);
   const role = staff.role as Role;
-  const token = await signSession({ sub: staff.id, role, name: staff.name });
+  const token = await signSession({ sub: staff.id, role, name: staff.name, tokenVersion: staff.tokenVersion });
   return Response.json({ token, name: staff.name, role, id: staff.id });
 }

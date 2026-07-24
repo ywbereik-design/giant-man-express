@@ -81,7 +81,7 @@ export function JobTypesScreen() {
           <SectionTitle>Job Types</SectionTitle>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No job types yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No job types yet.</Text> : null}
       renderItem={({ item }) => (
         <Card>
           <View style={styles.row}>

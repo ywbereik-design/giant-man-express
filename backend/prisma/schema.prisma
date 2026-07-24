@@ -23,6 +23,11 @@ model StaffUser {
   role         String   @default("ADMIN")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+
+  // Bumped on every password change so existing JWTs (which embed the value
+  // at sign time) stop validating immediately — otherwise a stolen token
+  // would keep working for its full lifetime even after a password reset.
+  tokenVersion Int @default(0)
 }
 
 model Driver {
@@ -40,6 +45,10 @@ model Driver {
   currentLat        Float?
   currentLng        Float?
   currentLocationAt DateTime?
+
+  // Bumped on every PIN change so existing JWTs (which embed the value at
+  // sign time) stop validating immediately — see StaffUser.tokenVersion.
+  tokenVersion Int @default(0)
 
   jobs          Job[]
   timeEntries   TimeEntry[]
@@ -68,7 +77,9 @@ model Business {
   invoices Invoice[]
 }
 
-// SQLite has no native enum support, so status fields are Strings.
+// Status fields are plain Strings rather than a native Postgres enum, purely
+// as a modeling choice made early on (kept for consistency, not a DB
+// limitation) — validated in application code instead.
 // Job.status is one of:
 //   ASSIGNED | ACCEPTED | ARRIVED | PICKED_UP | ON_THE_WAY | DELIVERED | CANCELLED
 // (validated in application code — see src/lib/constants.ts)
@@ -187,6 +198,11 @@ model HoursReport {
   generatedAt  DateTime @default(now())
   entriesJson  String // snapshot of the TimeEntry rows included, for a stable historical record
 
+  // Backstops the app-level duplicate check in POST /api/reports against a
+  // race between two concurrent requests for the same driver+period (e.g. a
+  // double-tap "Generate Report") — the second insert fails with P2002
+  // instead of both succeeding and double-counting payroll hours.
+  @@unique([driverId, periodStart, periodEnd])
   @@index([driverId])
 }
 
@@ -219,8 +235,13 @@ model InvoiceLineItem {
   rate        Float
   amount      Float
 
+  // A delivered job must never be billed on two different invoices. Postgres
+  // treats multiple NULLs as distinct, so line items with no jobId (if any)
+  // don't collide — this only backstops the actual "same job twice" case,
+  // guarding against two concurrent POST /api/invoices requests both reading
+  // the same "un-invoiced" job before either commits.
+  @@unique([jobId])
   @@index([invoiceId])
-  @@index([jobId])
 }
 
 // Backs sequential, human-friendly numbering (HR-0001, INV-0001, ...)

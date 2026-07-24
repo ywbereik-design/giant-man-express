@@ -36,7 +36,7 @@ export function DriverTopTabBar({
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Giant Man Express</Text>
-        <LogoutButton />
+        <LogoutButton warningMessage="If you're still clocked in, this won't end your shift — clock out first if you're done for the day." />
       </View>
       <DriverTabSegmentBar
         activeTab={state.routes[state.index].name as DriverTabKey}

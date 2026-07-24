@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireActiveDriver, hashSecret, verifySecret } from "@/lib/auth";
+import { requireActiveDriver, hashSecret, verifySecret, signSession } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { isRateLimited, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
@@ -45,9 +45,20 @@ export async function PATCH(req: NextRequest) {
   }
 
   await clearAttempts(key);
-  await prisma.driver.update({
+  // Bumping tokenVersion invalidates every existing token for this account,
+  // including this very request's — so a fresh token (reflecting the new
+  // version) is issued and returned, letting the caller's own session
+  // continue seamlessly while any other copy (e.g. a stolen token) stops
+  // working immediately instead of surviving up to 30 more days.
+  const updated = await prisma.driver.update({
     where: { id: driver.id },
-    data: { pinHash: await hashSecret(newPin) },
+    data: { pinHash: await hashSecret(newPin), tokenVersion: { increment: 1 } },
   });
-  return Response.json({ ok: true });
+  const token = await signSession({
+    sub: updated.id,
+    role: "DRIVER",
+    name: updated.name,
+    tokenVersion: updated.tokenVersion,
+  });
+  return Response.json({ ok: true, token });
 }

@@ -32,6 +32,6 @@ export async function POST(req: NextRequest) {
   }
 
   await clearAttempts(key);
-  const token = await signSession({ sub: driver.id, role: "DRIVER", name: driver.name });
+  const token = await signSession({ sub: driver.id, role: "DRIVER", name: driver.name, tokenVersion: driver.tokenVersion });
   return Response.json({ token, name: driver.name, role: "DRIVER", driverId: driver.id });
 }

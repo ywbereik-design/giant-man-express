@@ -66,7 +66,7 @@ export function LocationReportsScreen() {
           <ErrorText>{error}</ErrorText>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No active drivers yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No active drivers yet.</Text> : null}
       renderItem={({ item }) => {
         const expanded = expandedId === item.id;
         const detail = details[item.id];

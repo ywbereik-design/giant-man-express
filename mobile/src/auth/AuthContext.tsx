@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import * as SecureStore from "expo-secure-store";
-import { api, setAuthToken, setSessionExpiredHandler } from "../api/client";
+import { api, ApiError, setAuthToken, setSessionExpiredHandler } from "../api/client";
 import { SESSION_STORAGE_KEY } from "./storage";
 import { stopShiftTracking } from "../location/shiftTracking";
 
@@ -21,6 +21,11 @@ interface AuthContextValue {
   loginAsStaff: (email: string, password: string) => Promise<void>;
   loginAsDriver: (employeeCode: string, pin: string) => Promise<void>;
   logout: () => Promise<void>;
+  // Swaps in a freshly-issued token for the current session without a full
+  // re-login — used after a password/PIN change, which bumps the account's
+  // tokenVersion server-side and invalidates every previously-issued token,
+  // including the one this very session was using.
+  updateToken: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -31,22 +36,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await SecureStore.getItemAsync(STORAGE_KEY);
-        if (raw) {
-          const parsed: Session = JSON.parse(raw);
-          setAuthToken(parsed.token);
-          setSession(parsed);
-        }
-      } catch {
-        // SecureStore is unavailable in some environments (e.g. Expo web preview) — start logged out.
-      }
-      setLoading(false);
-    })();
-  }, []);
-
   const persist = useCallback(async (s: Session) => {
     try {
       await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(s));
@@ -55,6 +44,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setAuthToken(s.token);
     setSession(s);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      let restored: Session | null = null;
+      try {
+        const raw = await SecureStore.getItemAsync(STORAGE_KEY);
+        if (raw) restored = JSON.parse(raw);
+      } catch {
+        // SecureStore is unavailable in some environments (e.g. Expo web preview) — start logged out.
+      }
+
+      if (restored) {
+        // A restored session is never trusted blindly — the account may have
+        // been deactivated, demoted, or had its password/PIN changed (which
+        // invalidates the token) while the app was closed. Revalidate against
+        // the server before rendering that role's screens.
+        setAuthToken(restored.token);
+        try {
+          await api.get("/api/auth/me");
+          setSession(restored);
+        } catch (e) {
+          // Only a definite 401 from the server (session actually invalid)
+          // logs the user out here — a network failure/timeout/5xx while
+          // offline or the backend being briefly unreachable must NOT log
+          // out a driver with a perfectly valid session just because this
+          // one check couldn't complete. Fall through to keeping them
+          // logged in with their last-known session in that case.
+          if (e instanceof ApiError && e.status === 401) {
+            setAuthToken(null);
+            try {
+              await SecureStore.deleteItemAsync(STORAGE_KEY);
+            } catch {
+              // best-effort
+            }
+          } else {
+            setSession(restored);
+          }
+        }
+      }
+      setLoading(false);
+    })();
   }, []);
 
   // Used for both the "Admin" and "Dispatch" login tabs — they're both staff
@@ -81,6 +112,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await persist({ token: res.token, role: "DRIVER", name: res.name });
     },
     [persist]
+  );
+
+  const updateToken = useCallback(
+    async (token: string) => {
+      if (!session) return;
+      await persist({ ...session, token });
+    },
+    [session, persist]
   );
 
   const logout = useCallback(async () => {
@@ -113,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [logout]);
 
   return (
-    <AuthContext.Provider value={{ session, loading, loginAsStaff, loginAsDriver, logout }}>
+    <AuthContext.Provider value={{ session, loading, loginAsStaff, loginAsDriver, logout, updateToken }}>
       {children}
     </AuthContext.Provider>
   );

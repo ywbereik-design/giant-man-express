@@ -67,7 +67,7 @@ export function HistoryScreen() {
         keyExtractor={(e) => e.id}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={async () => { setLoading(true); await load(); setLoading(false); }} tintColor={colors.primary} />}
         ListHeaderComponent={<ErrorText>{error}</ErrorText>}
-        ListEmptyComponent={<Text style={styles.empty}>No shifts recorded yet.</Text>}
+        ListEmptyComponent={!error ? <Text style={styles.empty}>No shifts recorded yet.</Text> : null}
         renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
         renderItem={({ item }) => (
           <Card>

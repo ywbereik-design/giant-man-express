@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
+import { isValidEmail } from "../../lib/validation";
 import { colors, spacing } from "../../theme/theme";
 
 function parseRate(raw: string): { rate?: number; error?: string } {
@@ -56,6 +57,10 @@ export function BusinessesScreen() {
       setError("Enter a business name");
       return;
     }
+    if (contactEmail.trim() && !isValidEmail(contactEmail.trim())) {
+      setError("Enter a valid contact email address");
+      return;
+    }
     const { rate, error: rateError } = parseRate(billingRate);
     if (rateError) {
       setError(rateError);
@@ -101,6 +106,10 @@ export function BusinessesScreen() {
     setEditError(null);
     if (!editName.trim()) {
       setEditError("Business name is required");
+      return;
+    }
+    if (editContactEmail.trim() && !isValidEmail(editContactEmail.trim())) {
+      setEditError("Enter a valid contact email address");
       return;
     }
     const { rate, error: rateError } = parseRate(editBillingRate);
@@ -154,7 +163,7 @@ export function BusinessesScreen() {
           <SectionTitle>Businesses</SectionTitle>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No businesses yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No businesses yet.</Text> : null}
       renderItem={({ item }) => {
         if (editingId === item.id) {
           return (

@@ -24,16 +24,38 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
   onSessionExpired = handler;
 }
 
+const REQUEST_TIMEOUT_MS = 15000;
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const hadToken = !!authToken;
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      ...(options.headers ?? {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    // fetch() itself throws on no network, DNS failure, TLS error, or the
+    // abort triggered above — none of these produce a Response to inspect,
+    // so without this catch they'd propagate as a raw TypeError/AbortError
+    // instead of the app's consistent ApiError, and any call site that
+    // forgot its own try/catch would see an unhandled rejection.
+    const message =
+      e instanceof Error && e.name === "AbortError"
+        ? "The request timed out. Check your connection and try again."
+        : "Could not reach the server. Check your connection and try again.";
+    throw new ApiError(message, 0);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     let message = `Request failed (${res.status})`;

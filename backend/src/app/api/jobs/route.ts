@@ -31,6 +31,10 @@ export async function GET(req: NextRequest) {
     },
     orderBy: { createdAt: "desc" },
     include: JOB_INCLUDE,
+    // Bounded so this list doesn't grow unboundedly (with full photo data
+    // URLs on every row) as the business accumulates job history — the admin
+    // UI's default "Active" filter only needs recent/in-flight jobs anyway.
+    take: 200,
   });
   return Response.json({ jobs });
 }

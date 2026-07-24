@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Button, ErrorText, FieldInput, Label, Screen } from "../components/ui";
 import { colors, spacing } from "../theme/theme";
 import { ApiError } from "../api/client";
+import { isValidEmail } from "../lib/validation";
 
 type Mode = "ADMIN" | "DISPATCH" | "DRIVER";
 
@@ -43,7 +44,7 @@ export function LoginScreen() {
         setError("Enter your email and password");
         return;
       }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      if (!isValidEmail(email.trim())) {
         setError("Enter a valid email address");
         return;
       }

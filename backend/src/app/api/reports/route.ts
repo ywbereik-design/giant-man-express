@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { nextNumber } from "@/lib/numbering";
+import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, "ADMIN");
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
     where: driverId ? { driverId } : {},
     orderBy: { generatedAt: "desc" },
     include: { driver: { select: { name: true, employeeCode: true } } },
+    take: 100,
   });
   return Response.json({ reports });
 }
@@ -77,18 +79,26 @@ export async function POST(req: NextRequest) {
 
   const reportNumber = await nextNumber("HR", "hours_report");
 
-  const report = await prisma.hoursReport.create({
-    data: {
-      reportNumber,
-      driverId,
-      periodStart: start,
-      periodEnd: end,
-      totalHours,
-      totalDistanceKm,
-      entriesJson: JSON.stringify(rows),
-    },
-    include: { driver: { select: { name: true, employeeCode: true } } },
-  });
+  // The findFirst check above handles the common sequential-duplicate case
+  // with a friendly message; the @@unique([driverId, periodStart, periodEnd])
+  // constraint is the backstop for two concurrent requests both passing that
+  // check before either commits (e.g. a double-tap) — runOrRespond turns the
+  // resulting P2002 into a clean 409 instead of an unhandled 500.
+  const result = await runOrRespond(() =>
+    prisma.hoursReport.create({
+      data: {
+        reportNumber,
+        driverId,
+        periodStart: start,
+        periodEnd: end,
+        totalHours,
+        totalDistanceKm,
+        entriesJson: JSON.stringify(rows),
+      },
+      include: { driver: { select: { name: true, employeeCode: true } } },
+    })
+  );
+  if (isResponse(result)) return result;
 
-  return Response.json({ report }, { status: 201 });
+  return Response.json({ report: result }, { status: 201 });
 }

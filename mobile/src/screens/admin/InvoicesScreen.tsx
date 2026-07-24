@@ -110,7 +110,7 @@ export function InvoicesScreen() {
           <SectionTitle>Generated Invoices</SectionTitle>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No invoices generated yet.</Text>}
+      ListEmptyComponent={!error ? <Text style={styles.empty}>No invoices generated yet.</Text> : null}
       renderItem={({ item }) => (
         <Card>
           <Text style={styles.number}>{item.invoiceNumber}</Text>
