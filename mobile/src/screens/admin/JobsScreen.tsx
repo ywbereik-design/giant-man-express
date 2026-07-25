@@ -1,12 +1,12 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
+import { AddressRow } from "../../components/AddressRow";
 import { STATUS_TONE, STAGE_TIMESTAMPS, photoCaption } from "../../lib/jobStatus";
 import { colors, spacing } from "../../theme/theme";
 
@@ -231,20 +231,13 @@ export function AdminJobsScreen() {
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
             {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-            {item.pickupAddress && (
-              <View style={styles.addressRow}>
-                <Ionicons name="location" size={13} color={colors.textMuted} />
-                <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>
-              </View>
-            )}
+            {item.pickupAddress && <AddressRow label="Pickup: " address={item.pickupAddress} />}
             {item.dropoffStops.map((stop, i) => (
-              <View key={stop.id} style={styles.addressRow}>
-                <Ionicons name="location" size={13} color={colors.textMuted} />
-                <Text style={styles.meta}>
-                  {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-                  {stop.address}
-                </Text>
-              </View>
+              <AddressRow
+                key={stop.id}
+                label={item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+                address={stop.address}
+              />
             ))}
             {reachedStages.length > 0 && (
               <View style={styles.stageRow}>
@@ -312,6 +305,5 @@ const styles = StyleSheet.create({
   photoCol: { alignItems: "flex-start" },
   photoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginBottom: 4 },
   divider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.lg, marginBottom: spacing.md },
-  addressRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
 });

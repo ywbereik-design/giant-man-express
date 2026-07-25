@@ -14,6 +14,7 @@ import { capturePhoto } from "../../lib/capturePhoto";
 import { getCoords } from "../../lib/getCoords";
 import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
 import { CustomerContactButtons } from "../../components/CustomerContactButtons";
+import { AddressRow } from "../../components/AddressRow";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
 import { enqueueJobUpdate, flushQueuedJobUpdates, getQueuedJobIds } from "../../lib/offlineQueue";
 import * as ImagePicker from "expo-image-picker";
@@ -105,20 +106,13 @@ const JobCard = memo(function JobCard({
       </View>
       <Text style={styles.title}>{item.title}</Text>
       {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-      {item.pickupAddress && (
-        <View style={styles.addressRow}>
-          <Ionicons name="location" size={13} color={colors.textMuted} />
-          <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>
-        </View>
-      )}
+      {item.pickupAddress && <AddressRow label="Pickup: " address={item.pickupAddress} />}
       {item.dropoffStops.map((stop, i) => (
-        <View key={stop.id} style={styles.addressRow}>
-          <Ionicons name="location" size={13} color={colors.textMuted} />
-          <Text style={styles.meta}>
-            {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-            {stop.address}
-          </Text>
-        </View>
+        <AddressRow
+          key={stop.id}
+          label={item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+          address={stop.address}
+        />
       ))}
       {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
       {destination && <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />}
@@ -434,7 +428,6 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 17, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
-  addressRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
   failureText: { color: colors.danger, fontSize: 13, fontWeight: "600", marginTop: spacing.xs },
   notice: { color: colors.primary, marginBottom: spacing.md, fontSize: 13 },
