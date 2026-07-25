@@ -52,11 +52,28 @@ module.exports = {
       [
         "expo-image-picker",
         {
-          cameraPermission: "Giant Man Express uses your camera to take an arrival selfie when you start a job.",
+          cameraPermission:
+            "Giant Man Express uses your camera to take a clock-in selfie and proof-of-pickup/delivery photos.",
           microphonePermission: false,
         },
       ],
+      [
+        "expo-splash-screen",
+        {
+          image: "./assets/splash-icon.png",
+          imageWidth: 200,
+          resizeMode: "contain",
+          // Matches the app's dark theme (colors.background in theme.ts) so
+          // the launch screen doesn't flash white before the app renders.
+          backgroundColor: "#0f1115",
+        },
+      ],
       "expo-font",
+      // No plugin config of its own (piggybacks on expo-location's Android
+      // foreground-service manifest entries) — listed explicitly anyway so
+      // the full set of native modules this app depends on is documented
+      // in one place, matching expo-location/expo-image-picker above.
+      "expo-task-manager",
     ],
   },
 };

@@ -1,3 +1,4 @@
+import { Alert } from "react-native";
 import * as Location from "expo-location";
 import { SHIFT_LOCATION_TASK, postLocationPing } from "./shiftLocationTask";
 
@@ -14,6 +15,25 @@ export type TrackingMode = "background" | "foreground-only" | "denied";
 // but watchPositionAsync's subscription has to be held onto ourselves to stop it later.
 let foregroundSubscription: Location.LocationSubscription | null = null;
 
+// A dedicated in-app explanation shown before the OS background-location
+// prompt — required by Google Play's background location policy as a
+// "prominent disclosure" distinct from the system permission dialog's own
+// rationale text. Declining skips straight to the foreground-only fallback
+// below rather than asking the OS at all, so a driver who says no here isn't
+// immediately re-prompted by the system dialog anyway.
+function confirmBackgroundLocationDisclosure(): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      "Location While Clocked In",
+      "Giant Man Express records your location — including while the app is in the background — for as long as you're clocked in, to track mileage and show dispatch your live route to the next stop. Tracking stops the moment you clock out.",
+      [
+        { text: "Not Now", style: "cancel", onPress: () => resolve(false) },
+        { text: "Continue", onPress: () => resolve(true) },
+      ]
+    );
+  });
+}
+
 // Starts location tracking for the current shift. Requests background
 // permission so tracking can continue while the app is minimized (shown to
 // the driver via a persistent notification, per Android's foreground-service
@@ -24,7 +44,17 @@ export async function startShiftTracking(): Promise<TrackingMode> {
   const fg = await Location.requestForegroundPermissionsAsync();
   if (fg.status !== "granted") return "denied";
 
-  const bg = await Location.requestBackgroundPermissionsAsync().catch(() => null);
+  // Only show the disclosure (and ask the OS) when background permission
+  // isn't already granted — this function re-runs on every clock-in and on
+  // every app-foreground resume (see AuthContext's AppState handling), so
+  // without this check a driver who already said yes once would get
+  // re-prompted every single time instead of just the first.
+  const existingBg = await Location.getBackgroundPermissionsAsync().catch(() => null);
+  let bg = existingBg?.status === "granted" ? existingBg : null;
+  if (!bg) {
+    const disclosureAccepted = await confirmBackgroundLocationDisclosure();
+    bg = disclosureAccepted ? await Location.requestBackgroundPermissionsAsync().catch(() => null) : null;
+  }
 
   if (bg?.status === "granted") {
     foregroundSubscription?.remove();

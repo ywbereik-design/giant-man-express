@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { AppState } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { api, ApiError, setAuthToken, setSessionExpiredHandler } from "../api/client";
 import { SESSION_STORAGE_KEY } from "./storage";
@@ -150,6 +151,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => setSessionExpiredHandler(null);
   }, [logout]);
+
+  // React Navigation's useFocusEffect (used everywhere for data loading)
+  // only fires on screen navigation — it does NOT fire when a user simply
+  // backgrounds the app and returns to it without navigating anywhere. Left
+  // unhandled, a staff account deactivated/demoted while the app sat
+  // backgrounded for hours would keep showing stale, still-authenticated
+  // screens until the user happened to navigate (triggering a request that
+  // then 401s). Re-running the same launch-time revalidation on every
+  // background->active transition closes that gap.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active" || !session) return;
+      api.get("/api/auth/me").catch((e) => {
+        if (e instanceof ApiError && e.status === 401) logout();
+        // Any other failure (offline, brief backend hiccup) is ignored —
+        // don't log out a valid session just because this one check failed.
+      });
+    });
+    return () => subscription.remove();
+  }, [session, logout]);
 
   return (
     <AuthContext.Provider value={{ session, loading, loginAsStaff, loginAsDriver, logout, updateToken }}>

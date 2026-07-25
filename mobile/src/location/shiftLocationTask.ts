@@ -49,7 +49,15 @@ export async function postLocationPing(lat: number, lng: number): Promise<void> 
 // relaunch after the app process was killed while a background task was
 // still active. See mobile/index.ts, which imports this before anything else.
 TaskManager.defineTask(SHIFT_LOCATION_TASK, async ({ data, error }) => {
-  if (error) return;
+  if (error) {
+    // Otherwise a driver's mileage tracking can silently stop (location
+    // services disabled, permission revoked while backgrounded, OS killed
+    // the task) with zero signal to anyone that it happened — this at least
+    // makes it visible in device logs / any crash-reporting integration
+    // that later hooks into console output.
+    console.warn("[shift-location-task] location update error:", error.message);
+    return;
+  }
   const locations = (data as { locations?: { coords: { latitude: number; longitude: number } }[] } | undefined)
     ?.locations;
   const latest = locations?.[locations.length - 1];

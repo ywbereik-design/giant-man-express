@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from "react";
-import { Text, View, StyleSheet, RefreshControl, ScrollView } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { Text, View, StyleSheet, RefreshControl, ScrollView, AppState } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { api, ApiError } from "../../api/client";
@@ -94,6 +94,18 @@ export function HomeScreen() {
       load();
     }, [load])
   );
+
+  // useFocusEffect only fires on screen navigation — a driver who just
+  // backgrounds the app and returns to it without navigating anywhere
+  // (e.g. leaves it on Home the whole time) would otherwise never re-sync:
+  // not the clock status (missing a remote clock-out), and not tracking
+  // itself if the OS suspended it while backgrounded.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") load();
+    });
+    return () => subscription.remove();
+  }, [load]);
 
   async function onRefresh() {
     setRefreshing(true);
