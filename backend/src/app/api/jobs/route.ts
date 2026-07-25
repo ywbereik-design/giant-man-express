@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
-import { JOB_STATUSES } from "@/lib/constants";
+import { JOB_STATUSES, PHONE_PATTERN } from "@/lib/constants";
 import { safeDriverSelect } from "@/lib/select";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
@@ -45,7 +45,7 @@ const createSchema = z.object({
   driverId: z.string().min(1),
   businessId: z.string().min(1).optional(),
   pickupAddress: z.string().trim().optional(),
-  customerPhone: z.string().trim().optional(),
+  customerPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   // One pickup, any number of delivery stops, in route order.
   dropoffAddresses: z.array(z.string().trim().min(1)).optional(),
   notes: z.string().trim().optional(),

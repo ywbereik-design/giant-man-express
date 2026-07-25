@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
-import { JOB_STATUSES } from "@/lib/constants";
+import { FAILURE_REASONS, JOB_STATUSES, PHONE_PATTERN } from "@/lib/constants";
 import { safeDriverSelect } from "@/lib/select";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
@@ -13,11 +13,13 @@ const updateSchema = z.object({
   driverId: z.string().min(1).optional(),
   businessId: z.string().min(1).nullable().optional(),
   pickupAddress: z.string().trim().optional(),
-  customerPhone: z.string().trim().optional(),
+  customerPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   // When provided, replaces the job's whole set of delivery stops.
   dropoffAddresses: z.array(z.string().trim().min(1)).optional(),
   notes: z.string().trim().optional(),
   status: z.enum(JOB_STATUSES).optional(),
+  // Required when status is being set to FAILED — see the FAILED handling below.
+  failureReason: z.enum(FAILURE_REASONS).optional(),
 });
 
 // If an admin/dispatch sets a status directly (bypassing the driver's own
@@ -50,7 +52,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await parseBody(req, updateSchema);
   if (isError(body)) return body.error;
-  const { status, dropoffAddresses, ...rest } = body.data;
+  const { status, dropoffAddresses, failureReason, ...rest } = body.data;
+
+  if (status === "FAILED" && !failureReason) {
+    return Response.json({ error: "A reason is required to mark a job failed" }, { status: 400 });
+  }
 
   const existing = await prisma.job.findUnique({ where: { id: params.id } });
   if (!existing) return Response.json({ error: "Not found" }, { status: 404 });
@@ -95,6 +101,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         ...rest,
         ...(status ? { status } : {}),
         ...timestampUpdates,
+        ...(status === "FAILED" ? { failedAt: new Date(), failureReason } : {}),
         ...(dropoffAddresses !== undefined
           ? {
               dropoffStops: {

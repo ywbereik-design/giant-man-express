@@ -8,6 +8,7 @@ import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { AddressRow } from "../../components/AddressRow";
 import { STATUS_TONE, STAGE_TIMESTAMPS, photoCaption } from "../../lib/jobStatus";
+import { isValidPhone } from "../../lib/validation";
 import { colors, spacing } from "../../theme/theme";
 
 const FILTERS = [
@@ -88,6 +89,10 @@ export function AdminJobsScreen() {
     setError(null);
     if (!title.trim() || !jobTypeId || !driverId) {
       setError("Title, job type, and driver are required");
+      return;
+    }
+    if (customerPhone.trim() && !isValidPhone(customerPhone.trim())) {
+      setError("Enter a valid customer phone number, or leave it blank");
       return;
     }
     setSaving(true);

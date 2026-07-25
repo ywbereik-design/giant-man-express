@@ -51,3 +51,9 @@ export const MAX_SELFIE_DATA_URL_LENGTH = 3_000_000;
 // shift that's run unusually long (or was never clocked out) shows as
 // expired rather than a stale photo.
 export const SHIFT_PHOTO_EXPIRY_MS = 12 * 60 * 60 * 1000;
+
+// Loose on purpose (digits, spaces, and the usual phone punctuation) — this
+// is a dispatcher-entered contact number, not a strictly validated E.164
+// value, but it should at least contain a few digits rather than accepting
+// arbitrary text that would make the driver's Call/WhatsApp buttons dial junk.
+export const PHONE_PATTERN = /^[\d+()\-.\s]{7,20}$/;

@@ -16,6 +16,13 @@ export interface QueuedJobUpdate {
   queuedAt: string;
 }
 
+// Caps growth for a driver offline for an extended stretch — each item can
+// carry a full proof photo (~200-500KB, see capturePhoto.ts), so this isn't
+// unbounded. Dropping the oldest pending update on overflow rather than
+// refusing the newest one, since the newest is the action the driver just
+// took and is the one most likely to still be actionable.
+const MAX_QUEUE_ITEMS = 20;
+
 const queueFile = new File(Paths.document, "pending-job-updates.json");
 
 function readQueue(): QueuedJobUpdate[] {
@@ -29,14 +36,27 @@ function readQueue(): QueuedJobUpdate[] {
   }
 }
 
+// Writes via a fresh temp file + move rather than overwriting queueFile
+// in place, so a process kill mid-write can't leave behind a truncated,
+// unparseable JSON file — the only failure window that remains is between
+// deleting the old file and moving the new one into place (two fast
+// synchronous calls), not the entire serialize-and-write.
 function writeQueue(items: QueuedJobUpdate[]): void {
-  queueFile.write(JSON.stringify(items));
+  const tmp = new File(Paths.document, `pending-job-updates.${Date.now()}.tmp.json`);
+  tmp.write(JSON.stringify(items));
+  if (queueFile.exists) queueFile.delete();
+  tmp.move(queueFile);
 }
 
 export function enqueueJobUpdate(update: Omit<QueuedJobUpdate, "localId" | "queuedAt">): void {
   const items = readQueue();
   items.push({ ...update, localId: `${update.jobId}-${Date.now()}`, queuedAt: new Date().toISOString() });
+  while (items.length > MAX_QUEUE_ITEMS) items.shift();
   writeQueue(items);
+}
+
+function removeQueuedItem(localId: string): void {
+  writeQueue(readQueue().filter((i) => i.localId !== localId));
 }
 
 // So the job list can show "queued, will sync" on a card the driver already
@@ -52,13 +72,22 @@ let flushing = false;
 // a definite server rejection (e.g. the job's state moved on since this was
 // queued) drops just that one item rather than blocking everything behind it
 // forever.
+//
+// Re-reads the queue from disk at the top of every iteration (and again,
+// via removeQueuedItem, right before each write) instead of working off one
+// in-memory snapshot for the whole run — enqueueJobUpdate is fully
+// synchronous with no `await`, so it can only ever run to completion
+// between two of this function's own awaits, never during one. Reading
+// fresh each time means whatever it just added is still there afterward,
+// instead of being silently overwritten by this function writing back a
+// now-stale list.
 export async function flushQueuedJobUpdates(): Promise<void> {
   if (flushing) return;
   flushing = true;
   try {
-    let items = readQueue();
-    while (items.length > 0) {
-      const [next, ...rest] = items;
+    while (true) {
+      const next = readQueue()[0];
+      if (!next) break;
       try {
         await api.patch(`/api/driver/jobs/${next.jobId}/status`, {
           status: next.status,
@@ -67,18 +96,10 @@ export async function flushQueuedJobUpdates(): Promise<void> {
           lng: next.lng,
           failureReason: next.failureReason,
         });
-        items = rest;
-        writeQueue(items);
+        removeQueuedItem(next.localId);
       } catch (e) {
-        if (e instanceof ApiError && e.status === 0) {
-          // Still offline — leave this and everything behind it queued.
-          break;
-        }
-        // A real rejection (400/404/etc.) — this update can never succeed as
-        // queued (e.g. the job already moved past this transition), so drop
-        // it and keep going rather than blocking the rest of the queue.
-        items = rest;
-        writeQueue(items);
+        if (e instanceof ApiError && e.status === 0) break; // still offline — stop, leave it queued
+        removeQueuedItem(next.localId); // can never succeed as queued — drop it, keep going
       }
     }
   } finally {

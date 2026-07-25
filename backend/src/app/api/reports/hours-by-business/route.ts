@@ -42,6 +42,11 @@ export async function GET(req: NextRequest) {
     where: {
       businessId: businessId ?? { not: null },
       ...(driverId ? { driverId } : {}),
+      // Matches /api/invoices' filter — without this, a job an admin force-
+      // corrected from DELIVERED back to FAILED (deliveredAt is never
+      // cleared by that route, only backfilled forward) would still show up
+      // as billable hours here even though it's no longer a completed job.
+      status: "DELIVERED",
       deliveredAt: { gte: start, lt: end },
     },
     select: {

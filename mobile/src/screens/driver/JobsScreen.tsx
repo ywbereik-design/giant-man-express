@@ -85,7 +85,11 @@ const JobCard = memo(function JobCard({
   const action = NEXT_ACTION[item.status];
   const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
   const destination = routeDestination(item);
-  const batchEligible = !!action && BATCH_ALLOWED_STATUSES.includes(action.next);
+  // A job with an update already queued offline is excluded from batch
+  // selection — its local status is stale (the queue never optimistically
+  // updates `jobs`), so a batch action here could apply a second,
+  // conflicting transition on top of the one still waiting to sync.
+  const batchEligible = !!action && BATCH_ALLOWED_STATUSES.includes(action.next) && !isQueued;
 
   return (
     <Card>

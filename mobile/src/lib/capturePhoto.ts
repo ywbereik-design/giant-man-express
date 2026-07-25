@@ -55,6 +55,11 @@ export async function capturePhoto(cameraType: ImagePicker.CameraType): Promise<
     if (base64ByteSize(saved.base64) <= TARGET_MAX_BYTES) break;
   }
 
-  if (!last) return null;
+  // A photo WAS taken (the cancel case already returned above) but every
+  // compression attempt failed to produce output — a real processing
+  // failure, not "no photo taken". Throwing here (rather than also
+  // returning null) lets callers show an actual error instead of the
+  // misleading "a photo is required" message they show for a genuine cancel.
+  if (!last) throw new Error("Could not process the photo. Please try again.");
   return `data:image/jpeg;base64,${last}`;
 }

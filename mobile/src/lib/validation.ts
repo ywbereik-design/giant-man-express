@@ -5,3 +5,11 @@
 export function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
+
+// Mirrors the backend's PHONE_PATTERN (see backend/src/lib/constants.ts) —
+// loose on purpose, just enough to catch a dispatcher typing something
+// that clearly isn't a phone number before it reaches the driver's Call/
+// WhatsApp buttons downstream.
+export function isValidPhone(value: string): boolean {
+  return /^[\d+()\-.\s]{7,20}$/.test(value);
+}
