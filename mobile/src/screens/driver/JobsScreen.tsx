@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { AppState, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import NetInfo from "@react-native-community/netinfo";
@@ -12,7 +12,7 @@ import { DriverRouteMap } from "../../components/DriverRouteMap";
 import { routeDestination } from "../../lib/routeDestination";
 import { capturePhoto } from "../../lib/capturePhoto";
 import { getCoords } from "../../lib/getCoords";
-import { STATUS_TONE, STAGE_TIMESTAMPS, photoCaption } from "../../lib/jobStatus";
+import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
 import { CustomerContactButtons } from "../../components/CustomerContactButtons";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
 import { enqueueJobUpdate, flushQueuedJobUpdates, getQueuedJobIds } from "../../lib/offlineQueue";
@@ -34,11 +34,6 @@ const PHOTO_REQUIRED_ON: Partial<Record<JobStatus, true>> = {
   DELIVERED: true,
 };
 
-const GEO_FIELDS_ON: Partial<Record<JobStatus, { lat: "pickupLat" | "deliveryLat"; lng: "pickupLng" | "deliveryLng" }>> = {
-  PICKED_UP: { lat: "pickupLat", lng: "pickupLng" },
-  DELIVERED: { lat: "deliveryLat", lng: "deliveryLng" },
-};
-
 // Statuses a batch action can move several selected jobs into at once — the
 // same restriction the backend enforces (see BATCH_ALLOWED_STATUSES),
 // mirrored here so the UI never offers a batch action the server would
@@ -56,6 +51,107 @@ const BATCH_STATUS_LABEL: Partial<Record<JobStatus, string>> = {
 function canFail(status: JobStatus): boolean {
   return status === "ACCEPTED" || status === "ARRIVED" || status === "PICKED_UP" || status === "ON_THE_WAY";
 }
+
+interface JobCardProps {
+  item: Job;
+  selectionMode: boolean;
+  selected: boolean;
+  isQueued: boolean;
+  isUpdating: boolean;
+  onToggleSelect: (jobId: string) => void;
+  onAdvance: (job: Job) => void;
+  onMarkFailed: (job: Job) => void;
+}
+
+// Memoized so that a change elsewhere on screen (toggling one other card's
+// checkbox, a status update in flight, the offline queue flushing) doesn't
+// re-render every card in the list — each one mounts its own MapView (see
+// DriverRouteMap) plus decodes two proof-photo images, so an unnecessary
+// re-render here is far more expensive than in a typical list row. Relies
+// on every prop below being a primitive or a stable (useCallback'd)
+// function so React.memo's shallow comparison actually catches "nothing
+// relevant to this card changed".
+const JobCard = memo(function JobCard({
+  item,
+  selectionMode,
+  selected,
+  isQueued,
+  isUpdating,
+  onToggleSelect,
+  onAdvance,
+  onMarkFailed,
+}: JobCardProps) {
+  const action = NEXT_ACTION[item.status];
+  const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
+  const destination = routeDestination(item);
+  const batchEligible = !!action && BATCH_ALLOWED_STATUSES.includes(action.next);
+
+  return (
+    <Card>
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          {selectionMode && batchEligible && (
+            <Pressable onPress={() => onToggleSelect(item.id)} hitSlop={8} style={styles.checkbox}>
+              <Ionicons
+                name={selected ? "checkbox" : "square-outline"}
+                size={20}
+                color={selected ? colors.primary : colors.textMuted}
+              />
+            </Pressable>
+          )}
+          <Badge text={item.jobType.name} />
+        </View>
+        <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
+      </View>
+      <Text style={styles.title}>{item.title}</Text>
+      {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
+      {item.pickupAddress && (
+        <View style={styles.addressRow}>
+          <Ionicons name="location" size={13} color={colors.textMuted} />
+          <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>
+        </View>
+      )}
+      {item.dropoffStops.map((stop, i) => (
+        <View key={stop.id} style={styles.addressRow}>
+          <Ionicons name="location" size={13} color={colors.textMuted} />
+          <Text style={styles.meta}>
+            {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+            {stop.address}
+          </Text>
+        </View>
+      ))}
+      {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
+      {destination && <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />}
+      {reachedStages.length > 0 && (
+        <View style={styles.stageRow}>
+          {reachedStages.map((s) => (
+            <Badge
+              key={s.field}
+              text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
+              tone="muted"
+            />
+          ))}
+        </View>
+      )}
+      {item.status === "FAILED" && item.failureReason && <Text style={styles.failureText}>Failed: {item.failureReason}</Text>}
+      {item.customerPhone && action && !selectionMode && <CustomerContactButtons phone={item.customerPhone} />}
+      {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
+      {action && !selectionMode && (
+        <View style={{ marginTop: spacing.sm }}>
+          <Button title={action.label} onPress={() => onAdvance(item)} loading={isUpdating} disabled={isQueued} />
+          {canFail(item.status) && (
+            <Button
+              title="Mark Failed / Undelivered"
+              variant="danger"
+              onPress={() => onMarkFailed(item)}
+              disabled={isQueued || isUpdating}
+            />
+          )}
+        </View>
+      )}
+    </Card>
+  );
+});
 
 export function DriverJobsScreen() {
   const tabBarHeight = useDriverTabBarHeight();
@@ -112,19 +208,23 @@ export function DriverJobsScreen() {
     };
   }, [syncQueue]);
 
-  function exitSelectionMode() {
+  const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
     setSelectedIds(new Set());
-  }
+  }, []);
 
-  function toggleSelected(jobId: string) {
+  // useCallback with no deps — this only ever does a functional state
+  // update, so its identity can stay stable for the lifetime of the screen,
+  // which is what lets JobCard's React.memo actually skip re-rendering
+  // every other card when just one checkbox is toggled.
+  const toggleSelected = useCallback((jobId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(jobId)) next.delete(jobId);
       else next.add(jobId);
       return next;
     });
-  }
+  }, []);
 
   // The common next status across every currently-selected job, or null if
   // the selection is empty or mixed (no single batch action would apply to
@@ -166,66 +266,79 @@ export function DriverJobsScreen() {
   // Shared by the normal Accept/Arrived/.../Delivered flow and the offline
   // queue's retry path — sends the status update, and on a network failure
   // (not a rejection) queues it for later instead of surfacing a hard error.
-  async function sendStatusUpdate(
-    job: Job,
-    status: JobStatus,
-    extra: { photo?: string; lat?: number; lng?: number; failureReason?: FailureReason }
-  ): Promise<boolean> {
-    try {
-      await api.patch(`/api/driver/jobs/${job.id}/status`, { status, ...extra });
-      return true;
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 0) {
-        enqueueJobUpdate({ jobId: job.id, status, ...extra });
-        setQueuedIds(getQueuedJobIds());
-        setNotice("You're offline — this update is saved and will sync automatically once you're back online.");
-        return false;
-      }
-      throw e;
-    }
-  }
-
-  async function advance(job: Job) {
-    const action = NEXT_ACTION[job.status];
-    if (!action) return;
-    setError(null);
-    setNotice(null);
-
-    let photo: string | undefined;
-    let lat: number | undefined;
-    let lng: number | undefined;
-    if (PHOTO_REQUIRED_ON[action.next]) {
+  // useCallback with no deps: every closed-over setter is stable, so this
+  // never needs a new identity — which lets `advance` below stay stable too.
+  const sendStatusUpdate = useCallback(
+    async (
+      job: Job,
+      status: JobStatus,
+      extra: { photo?: string; lat?: number; lng?: number; failureReason?: FailureReason }
+    ): Promise<boolean> => {
       try {
-        const captured = await capturePhoto(ImagePicker.CameraType.back);
-        if (!captured) {
-          const label = action.next === "PICKED_UP" ? "pickup" : "delivery";
-          setError(`A ${label} photo is required to continue.`);
+        await api.patch(`/api/driver/jobs/${job.id}/status`, { status, ...extra });
+        return true;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 0) {
+          enqueueJobUpdate({ jobId: job.id, status, ...extra });
+          setQueuedIds(getQueuedJobIds());
+          setNotice("You're offline — this update is saved and will sync automatically once you're back online.");
+          return false;
+        }
+        throw e;
+      }
+    },
+    []
+  );
+
+  // Stable across renders (deps are themselves stable) — passed straight
+  // into the memoized JobCard as onAdvance, so tapping one card's action
+  // button doesn't invalidate every other card's memo.
+  const advance = useCallback(
+    async (job: Job) => {
+      const action = NEXT_ACTION[job.status];
+      if (!action) return;
+      setError(null);
+      setNotice(null);
+
+      let photo: string | undefined;
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if (PHOTO_REQUIRED_ON[action.next]) {
+        try {
+          const captured = await capturePhoto(ImagePicker.CameraType.back);
+          if (!captured) {
+            const label = action.next === "PICKED_UP" ? "pickup" : "delivery";
+            setError(`A ${label} photo is required to continue.`);
+            return;
+          }
+          photo = captured;
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Could not open the camera");
           return;
         }
-        photo = captured;
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not open the camera");
-        return;
+        // Attached as verification metadata alongside the photo — best
+        // effort, a denied/unavailable GPS fix still lets the delivery proceed.
+        const { coords } = await getCoords();
+        if (coords) {
+          lat = coords.lat;
+          lng = coords.lng;
+        }
       }
-      // Attached as verification metadata alongside the photo — best
-      // effort, a denied/unavailable GPS fix still lets the delivery proceed.
-      const { coords } = await getCoords();
-      if (coords) {
-        lat = coords.lat;
-        lng = coords.lng;
-      }
-    }
 
-    setUpdatingId(job.id);
-    try {
-      const sent = await sendStatusUpdate(job, action.next, { photo, lat, lng });
-      if (sent) await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not update job");
-    } finally {
-      setUpdatingId(null);
-    }
-  }
+      setUpdatingId(job.id);
+      try {
+        const sent = await sendStatusUpdate(job, action.next, { photo, lat, lng });
+        if (sent) await load();
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Could not update job");
+      } finally {
+        setUpdatingId(null);
+      }
+    },
+    [sendStatusUpdate, load]
+  );
+
+  const handleMarkFailed = useCallback((job: Job) => setFailingJob(job), []);
 
   async function submitFailure(reason: FailureReason) {
     const job = failingJob;
@@ -246,12 +359,37 @@ export function DriverJobsScreen() {
 
   if (initialLoading) return <CenteredSpinner />;
 
+  const renderItem = useCallback(
+    ({ item }: { item: Job }) => (
+      <JobCard
+        item={item}
+        selectionMode={selectionMode}
+        selected={selectedIds.has(item.id)}
+        isQueued={queuedIds.has(item.id)}
+        isUpdating={updatingId === item.id}
+        onToggleSelect={toggleSelected}
+        onAdvance={advance}
+        onMarkFailed={handleMarkFailed}
+      />
+    ),
+    [selectionMode, selectedIds, queuedIds, updatingId, toggleSelected, advance, handleMarkFailed]
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <FlatList
         contentContainerStyle={{ padding: spacing.md, paddingTop: spacing.md + tabBarHeight }}
         data={jobs}
         keyExtractor={(j) => j.id}
+        // A driver's list is short (a handful of assigned jobs, not
+        // hundreds), so these mainly help by unmounting off-screen cards —
+        // each one holds a live MapView + up to two decoded proof photos,
+        // which is heavy enough that even a small list benefits from not
+        // keeping every row mounted at once.
+        initialNumToRender={6}
+        maxToRenderPerBatch={4}
+        windowSize={7}
+        removeClippedSubviews
         refreshControl={<RefreshControl refreshing={loading} onRefresh={async () => { setLoading(true); await syncQueue(); setLoading(false); }} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View>
@@ -265,90 +403,7 @@ export function DriverJobsScreen() {
           </View>
         }
         ListEmptyComponent={!error ? <Text style={styles.empty}>No jobs assigned right now.</Text> : null}
-        renderItem={({ item }) => {
-          const action = NEXT_ACTION[item.status];
-          const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
-          const destination = routeDestination(item);
-          const isQueued = queuedIds.has(item.id);
-          const batchEligible = !!action && BATCH_ALLOWED_STATUSES.includes(action.next);
-          const selected = selectedIds.has(item.id);
-          return (
-            <Card>
-              <View style={styles.headerRow}>
-                <View style={styles.headerLeft}>
-                  {selectionMode && batchEligible && (
-                    <Pressable onPress={() => toggleSelected(item.id)} hitSlop={8} style={styles.checkbox}>
-                      <Ionicons
-                        name={selected ? "checkbox" : "square-outline"}
-                        size={20}
-                        color={selected ? colors.primary : colors.textMuted}
-                      />
-                    </Pressable>
-                  )}
-                  <Badge text={item.jobType.name} />
-                </View>
-                <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
-              </View>
-              <Text style={styles.title}>{item.title}</Text>
-              {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-              {item.pickupAddress && (
-                <View style={styles.addressRow}>
-                  <Ionicons name="location" size={13} color={colors.textMuted} />
-                  <Text style={styles.meta}>Pickup: {item.pickupAddress}</Text>
-                </View>
-              )}
-              {item.dropoffStops.map((stop, i) => (
-                <View key={stop.id} style={styles.addressRow}>
-                  <Ionicons name="location" size={13} color={colors.textMuted} />
-                  <Text style={styles.meta}>
-                    {item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-                    {stop.address}
-                  </Text>
-                </View>
-              ))}
-              {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
-              {destination && (
-                <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />
-              )}
-              {reachedStages.length > 0 && (
-                <View style={styles.stageRow}>
-                  {reachedStages.map((s) => (
-                    <Badge
-                      key={s.field}
-                      text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
-                      tone="muted"
-                    />
-                  ))}
-                </View>
-              )}
-              {item.status === "FAILED" && item.failureReason && (
-                <Text style={styles.failureText}>Failed: {item.failureReason}</Text>
-              )}
-              {item.customerPhone && action && !selectionMode && (
-                <CustomerContactButtons phone={item.customerPhone} />
-              )}
-              {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
-              {action && !selectionMode && (
-                <View style={{ marginTop: spacing.sm }}>
-                  <Button
-                    title={action.label}
-                    onPress={() => advance(item)}
-                    loading={updatingId === item.id}
-                    disabled={isQueued}
-                  />
-                  {canFail(item.status) && (
-                    <Button
-                      title="Mark Failed / Undelivered"
-                      variant="danger"
-                      onPress={() => setFailingJob(item)}
-                      disabled={isQueued || updatingId === item.id}
-                    />
-                  )}
-                </View>
-              )}
-            </Card>
-          );
-        }}
+        renderItem={renderItem}
       />
       {selectionMode && selectedIds.size > 0 && (
         <View style={[styles.batchBar, { paddingBottom: spacing.md + tabBarHeight }]}>

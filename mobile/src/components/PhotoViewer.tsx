@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import { Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, spacing } from "../theme/theme";
 
@@ -14,14 +14,28 @@ interface Props {
 // Tap-to-expand photo thumbnail — self-contained (manages its own
 // full-screen viewer Modal), so screens don't need to lift viewing state
 // just to show a proof photo. Used for clock-in selfies and pickup/delivery
-// proof photos alike.
-export function PhotoThumbnail({ uri, size = 56, caption }: Props) {
+// proof photos alike. Memoized since it typically renders inside a list row
+// (up to two per job card) — its own uri/size/caption props rarely change
+// once a job's photos are set, so there's no reason to re-decode on every
+// unrelated re-render of its parent.
+export const PhotoThumbnail = memo(function PhotoThumbnail({ uri, size = 56, caption }: Props) {
   const [viewing, setViewing] = useState(false);
 
   return (
     <>
       <Pressable onPress={() => setViewing(true)}>
-        <Image source={{ uri }} style={[styles.thumbnail, { width: size, height: size }]} />
+        <Image
+          source={{ uri }}
+          style={[styles.thumbnail, { width: size, height: size }]}
+          resizeMode="cover"
+          // Android-only: without this, the platform decodes the photo at
+          // its full captured resolution (up to 1024px wide — see
+          // capturePhoto.ts) and scales the bitmap down for display, which
+          // holds several times more pixel data in memory than a 56x56
+          // thumbnail ever needs. "resize" asks the decoder to downsample
+          // to the target size up front instead. No-op on iOS.
+          resizeMethod="resize"
+        />
       </Pressable>
       <Modal visible={viewing} transparent animationType="fade" onRequestClose={() => setViewing(false)}>
         <Pressable style={styles.viewerBackdrop} onPress={() => setViewing(false)}>
@@ -35,7 +49,7 @@ export function PhotoThumbnail({ uri, size = 56, caption }: Props) {
       </Modal>
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   thumbnail: { borderRadius: 8, backgroundColor: colors.surfaceAlt },
