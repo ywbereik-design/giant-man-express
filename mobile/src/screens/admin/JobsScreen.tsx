@@ -7,13 +7,14 @@ import { Business, Driver, Job, JobType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
-import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
+import { STATUS_TONE, STAGE_TIMESTAMPS, photoCaption } from "../../lib/jobStatus";
 import { colors, spacing } from "../../theme/theme";
 
 const FILTERS = [
   { id: "ACTIVE", label: "Active" },
   { id: "ALL", label: "All" },
   { id: "DELIVERED", label: "Delivered" },
+  { id: "FAILED", label: "Failed" },
   { id: "CANCELLED", label: "Cancelled" },
 ] as const;
 type FilterId = (typeof FILTERS)[number]["id"];
@@ -34,6 +35,7 @@ export function AdminJobsScreen() {
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddresses, setDropoffAddresses] = useState<string[]>([""]);
+  const [customerPhone, setCustomerPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -97,6 +99,7 @@ export function AdminJobsScreen() {
         businessId: businessId ?? undefined,
         pickupAddress: pickupAddress.trim() || undefined,
         dropoffAddresses: dropoffAddresses.map((a) => a.trim()).filter(Boolean),
+        customerPhone: customerPhone.trim() || undefined,
         notes: notes.trim() || undefined,
       });
       setTitle("");
@@ -105,6 +108,7 @@ export function AdminJobsScreen() {
       setBusinessId(null);
       setPickupAddress("");
       setDropoffAddresses([""]);
+      setCustomerPhone("");
       setNotes("");
       await load();
     } catch (e) {
@@ -192,6 +196,14 @@ export function AdminJobsScreen() {
             ))}
             <Button title="+ Add Delivery Stop" variant="secondary" onPress={addDropoffField} />
 
+            <Label>Customer Phone (optional)</Label>
+            <FieldInput
+              value={customerPhone}
+              onChangeText={setCustomerPhone}
+              placeholder="+1 555 555 5555"
+              keyboardType="phone-pad"
+            />
+
             <Label>Notes (optional)</Label>
             <FieldInput value={notes} onChangeText={setNotes} placeholder="Gate code, contact, etc." />
 
@@ -245,23 +257,32 @@ export function AdminJobsScreen() {
                 ))}
               </View>
             )}
+            {item.status === "FAILED" && item.failureReason && (
+              <Text style={styles.failureText}>Failed: {item.failureReason}</Text>
+            )}
             {(item.pickupPhoto || item.deliveryPhoto) && (
               <View style={styles.photoRow}>
                 {item.pickupPhoto && (
                   <View style={styles.photoCol}>
                     <Text style={styles.photoLabel}>Pickup</Text>
-                    <PhotoThumbnail uri={item.pickupPhoto} />
+                    <PhotoThumbnail
+                      uri={item.pickupPhoto}
+                      caption={photoCaption(item.pickupLat, item.pickupLng, item.pickedUpAt)}
+                    />
                   </View>
                 )}
                 {item.deliveryPhoto && (
                   <View style={styles.photoCol}>
                     <Text style={styles.photoLabel}>Delivery</Text>
-                    <PhotoThumbnail uri={item.deliveryPhoto} />
+                    <PhotoThumbnail
+                      uri={item.deliveryPhoto}
+                      caption={photoCaption(item.deliveryLat, item.deliveryLng, item.deliveredAt)}
+                    />
                   </View>
                 )}
               </View>
             )}
-            {item.status !== "DELIVERED" && item.status !== "CANCELLED" && (
+            {item.status !== "DELIVERED" && item.status !== "CANCELLED" && item.status !== "FAILED" && (
               <View style={{ marginTop: spacing.sm }}>
                 <Button
                   title="Cancel Job"
@@ -286,6 +307,7 @@ const styles = StyleSheet.create({
   stopRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   removeStop: { paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   removeStopText: { color: colors.danger, fontSize: 13, fontWeight: "600" },
+  failureText: { color: colors.danger, fontSize: 13, fontWeight: "600", marginTop: spacing.xs },
   photoRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
   photoCol: { alignItems: "flex-start" },
   photoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginBottom: 4 },

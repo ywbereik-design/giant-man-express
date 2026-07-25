@@ -81,7 +81,7 @@ model Business {
 // as a modeling choice made early on (kept for consistency, not a DB
 // limitation) — validated in application code instead.
 // Job.status is one of:
-//   ASSIGNED | ACCEPTED | ARRIVED | PICKED_UP | ON_THE_WAY | DELIVERED | CANCELLED
+//   ASSIGNED | ACCEPTED | ARRIVED | PICKED_UP | ON_THE_WAY | DELIVERED | CANCELLED | FAILED
 // (validated in application code — see src/lib/constants.ts)
 
 model Job {
@@ -94,6 +94,11 @@ model Job {
   businessId     String?
   business       Business? @relation(fields: [businessId], references: [id])
   pickupAddress  String?
+  // The recipient's phone number, used for the driver's one-touch Call /
+  // WhatsApp buttons on their job card. Optional — jobs created before this
+  // field existed, or without a reachable contact, simply don't show those
+  // buttons.
+  customerPhone  String?
   notes          String?
   status         String    @default("ASSIGNED")
   createdAt      DateTime  @default(now())
@@ -109,6 +114,10 @@ model Job {
   pickedUpAt  DateTime?
   onTheWayAt  DateTime?
   deliveredAt DateTime?
+  // Set when a driver marks the job FAILED instead of progressing it —
+  // mutually exclusive with deliveredAt (a job reaches exactly one terminal
+  // state).
+  failedAt    DateTime?
 
   // Proof-of-pickup / proof-of-delivery photos, captured by the driver at
   // the ARRIVED->PICKED_UP and ON_THE_WAY->DELIVERED transitions (same
@@ -117,6 +126,20 @@ model Job {
   // forward — historical/in-flight jobs predate this field.
   pickupPhoto   String?
   deliveryPhoto String?
+
+  // Device GPS at the moment each proof photo was captured, alongside the
+  // already-server-timestamped pickedUpAt/deliveredAt above — lets
+  // dispatch/admin verify a photo was actually taken at the job site rather
+  // than trusting the image alone.
+  pickupLat    Float?
+  pickupLng    Float?
+  deliveryLat  Float?
+  deliveryLng  Float?
+
+  // Required, driver-selected reason when status is set to FAILED (see
+  // FAILURE_REASONS in src/lib/constants.ts) — e.g. "No Answer",
+  // "Incorrect Address". Null for every other status.
+  failureReason String?
 
   invoiceLineItems InvoiceLineItem[]
 

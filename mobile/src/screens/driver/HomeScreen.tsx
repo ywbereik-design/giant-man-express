@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Text, View, StyleSheet, RefreshControl, ScrollView, AppState } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import * as Location from "expo-location";
 import { api, ApiError } from "../../api/client";
 import { TimeEntry } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
@@ -10,45 +9,12 @@ import { ChangePinCard } from "../../components/ChangePinCard";
 import { colors, spacing } from "../../theme/theme";
 import { isShiftTrackingActive, startShiftTracking, stopShiftTracking } from "../../location/shiftTracking";
 import { captureSelfie } from "../../lib/captureSelfie";
+import { getCoords } from "../../lib/getCoords";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 
 interface StatusResponse {
   clockedIn: boolean;
   openEntry: TimeEntry | null;
-}
-
-const LOCATION_TIMEOUT_MS = 10000;
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timeout")), ms);
-    promise.then(
-      (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(timer);
-        reject(e);
-      }
-    );
-  });
-}
-
-interface CoordsResult {
-  coords?: { lat: number; lng: number };
-  locationCaptured: boolean;
-}
-
-async function getCoords(): Promise<CoordsResult> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== "granted") return { locationCaptured: false };
-  try {
-    const pos = await withTimeout(Location.getCurrentPositionAsync({}), LOCATION_TIMEOUT_MS);
-    return { coords: { lat: pos.coords.latitude, lng: pos.coords.longitude }, locationCaptured: true };
-  } catch {
-    return { locationCaptured: false };
-  }
 }
 
 export function HomeScreen() {

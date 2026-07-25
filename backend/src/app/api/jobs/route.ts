@@ -45,6 +45,7 @@ const createSchema = z.object({
   driverId: z.string().min(1),
   businessId: z.string().min(1).optional(),
   pickupAddress: z.string().trim().optional(),
+  customerPhone: z.string().trim().optional(),
   // One pickup, any number of delivery stops, in route order.
   dropoffAddresses: z.array(z.string().trim().min(1)).optional(),
   notes: z.string().trim().optional(),

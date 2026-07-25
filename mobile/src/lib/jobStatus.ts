@@ -8,6 +8,7 @@ export const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "mut
   ON_THE_WAY: "info",
   DELIVERED: "success",
   CANCELLED: "muted",
+  FAILED: "danger",
 };
 
 // Stage timestamps shown on a job card, in order — only the ones the job has
@@ -19,3 +20,12 @@ export const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
   { field: "onTheWayAt", label: "On the way" },
   { field: "deliveredAt", label: "Delivered" },
 ];
+
+// GPS + server timestamp captured with a proof photo, formatted for the
+// PhotoThumbnail viewer's overlay caption — verification info shown
+// alongside the photo, not burned into it.
+export function photoCaption(lat: number | null, lng: number | null, at: string | null): string | undefined {
+  if (lat == null || lng == null || !at) return undefined;
+  const when = new Date(at).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" });
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)} · ${when}`;
+}

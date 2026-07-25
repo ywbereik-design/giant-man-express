@@ -5,7 +5,16 @@ export type JobStatus =
   | "PICKED_UP"
   | "ON_THE_WAY"
   | "DELIVERED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "FAILED";
+
+export const FAILURE_REASONS = [
+  "No Answer",
+  "Incorrect Address",
+  "Customer Rescheduled",
+  "Location Closed",
+] as const;
+export type FailureReason = (typeof FAILURE_REASONS)[number];
 export type StaffRole = "ADMIN" | "DISPATCH";
 
 export interface Driver {
@@ -81,6 +90,9 @@ export interface Job {
   title: string;
   status: JobStatus;
   pickupAddress: string | null;
+  // Recipient's phone, used for the driver's one-touch Call / WhatsApp
+  // buttons — null for jobs without a reachable contact on file.
+  customerPhone: string | null;
   // Any number of delivery locations, in route order.
   dropoffStops: JobStop[];
   notes: string | null;
@@ -92,11 +104,20 @@ export interface Job {
   pickedUpAt: string | null;
   onTheWayAt: string | null;
   deliveredAt: string | null;
+  // Set instead of deliveredAt if the driver marks the job FAILED.
+  failedAt: string | null;
+  failureReason: FailureReason | null;
   // Proof-of-pickup / proof-of-delivery photos, captured by the driver at
   // the ARRIVED->PICKED_UP and ON_THE_WAY->DELIVERED transitions. Null for
   // jobs that haven't reached that stage yet, or predate this feature.
   pickupPhoto: string | null;
   deliveryPhoto: string | null;
+  // Device GPS at the moment each photo above was captured — null unless
+  // location was available/granted at that time.
+  pickupLat: number | null;
+  pickupLng: number | null;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
   jobType: JobType;
   driver?: Driver;
   business?: Business | null;
