@@ -16,7 +16,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
 
-  const entries: HoursReportEntryRow[] = JSON.parse(report.entriesJson);
+  let entries: HoursReportEntryRow[];
+  try {
+    entries = JSON.parse(report.entriesJson);
+  } catch {
+    // entriesJson is always written by JSON.stringify in /api/reports, so
+    // this isn't attacker-reachable today — but a malformed row (a future
+    // migration bug, a manual DB edit) should fail cleanly, not take down
+    // this route with an unhandled 500.
+    return Response.json({ error: "This report's stored data is corrupted and can't be rendered" }, { status: 500 });
+  }
 
   const buffer = await renderToBuffer(
     HoursReportDocument({

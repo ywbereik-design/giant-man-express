@@ -3,20 +3,28 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
-import { FAILURE_REASONS, JOB_STATUSES, PHONE_PATTERN } from "@/lib/constants";
+import {
+  FAILURE_REASONS,
+  JOB_STATUSES,
+  MAX_DROPOFF_STOPS,
+  MAX_JOB_NOTES_LENGTH,
+  MAX_JOB_TEXT_LENGTH,
+  PHONE_PATTERN,
+} from "@/lib/constants";
 import { safeDriverSelect } from "@/lib/select";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
 const updateSchema = z.object({
-  title: z.string().trim().min(1).optional(),
+  title: z.string().trim().min(1).max(MAX_JOB_TEXT_LENGTH).optional(),
   jobTypeId: z.string().min(1).optional(),
   driverId: z.string().min(1).optional(),
   businessId: z.string().min(1).nullable().optional(),
-  pickupAddress: z.string().trim().optional(),
+  pickupAddress: z.string().trim().max(MAX_JOB_TEXT_LENGTH).optional(),
   customerPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
-  // When provided, replaces the job's whole set of delivery stops.
-  dropoffAddresses: z.array(z.string().trim().min(1)).optional(),
-  notes: z.string().trim().optional(),
+  // When provided, replaces the job's whole set of delivery stops — capped
+  // so a single edit can't force an unbounded JobStop bulk-insert.
+  dropoffAddresses: z.array(z.string().trim().min(1).max(MAX_JOB_TEXT_LENGTH)).max(MAX_DROPOFF_STOPS).optional(),
+  notes: z.string().trim().max(MAX_JOB_NOTES_LENGTH).optional(),
   status: z.enum(JOB_STATUSES).optional(),
   // Required when status is being set to FAILED — see the FAILED handling below.
   failureReason: z.enum(FAILURE_REASONS).optional(),

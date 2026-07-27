@@ -6,6 +6,7 @@ import { parseBody, isError } from "@/lib/api";
 import {
   DRIVER_ALLOWED_TRANSITIONS,
   FAILURE_REASONS,
+  IMAGE_DATA_URL_PATTERN,
   JobStatus,
   MAX_SELFIE_DATA_URL_LENGTH,
 } from "@/lib/constants";
@@ -14,7 +15,7 @@ const schema = z.object({
   status: z.enum(["ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY", "DELIVERED", "FAILED"]),
   photo: z
     .string()
-    .startsWith("data:image/", "photo must be an image data URL")
+    .regex(IMAGE_DATA_URL_PATTERN, "photo must be a JPEG or PNG image data URL")
     .max(MAX_SELFIE_DATA_URL_LENGTH, "Photo is too large")
     .optional(),
   // Device GPS at the moment the photo above was captured — only meaningful

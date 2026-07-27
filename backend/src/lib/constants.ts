@@ -46,6 +46,14 @@ export const BATCH_ALLOWED_STATUSES = ["ACCEPTED", "ARRIVED", "ON_THE_WAY"] as c
 // broken/huge upload. Shared by every endpoint that accepts a selfie.
 export const MAX_SELFIE_DATA_URL_LENGTH = 3_000_000;
 
+// Restricts every photo upload (clock-in selfie, pickup/delivery proof) to
+// the raster formats capturePhoto.ts actually produces (JPEG). Deliberately
+// narrower than a bare "data:image/" prefix check, which would also accept
+// e.g. "data:image/svg+xml" — an SVG can embed a script (onload, <script>)
+// that executes if ever rendered in an HTML context instead of a raster
+// <Image>, and a bare MIME-prefix check has no way to catch that.
+export const IMAGE_DATA_URL_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,/;
+
 // A clock-in selfie stops being shown to admin/dispatch after this long —
 // it's meant as "who's on shift right now", not an indefinite record, so a
 // shift that's run unusually long (or was never clocked out) shows as
@@ -57,3 +65,13 @@ export const SHIFT_PHOTO_EXPIRY_MS = 12 * 60 * 60 * 1000;
 // value, but it should at least contain a few digits rather than accepting
 // arbitrary text that would make the driver's Call/WhatsApp buttons dial junk.
 export const PHONE_PATTERN = /^[\d+()\-.\s]{7,20}$/;
+
+// Generous but bounded lengths for dispatcher-entered free text on a Job —
+// these values get embedded verbatim into generated invoice/report PDFs
+// (see /api/invoices, /api/reports/[id]/pdf), so an unbounded string or
+// stop-address array is a resource-exhaustion vector (a pathologically
+// large PDF render) reachable by any ADMIN/DISPATCH account, not just a
+// data-quality issue.
+export const MAX_JOB_TEXT_LENGTH = 300;
+export const MAX_JOB_NOTES_LENGTH = 2000;
+export const MAX_DROPOFF_STOPS = 50;

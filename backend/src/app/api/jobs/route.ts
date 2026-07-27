@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
-import { JOB_STATUSES, PHONE_PATTERN } from "@/lib/constants";
+import { JOB_STATUSES, MAX_DROPOFF_STOPS, MAX_JOB_NOTES_LENGTH, MAX_JOB_TEXT_LENGTH, PHONE_PATTERN } from "@/lib/constants";
 import { safeDriverSelect } from "@/lib/select";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
@@ -40,15 +40,16 @@ export async function GET(req: NextRequest) {
 }
 
 const createSchema = z.object({
-  title: z.string().trim().min(1),
+  title: z.string().trim().min(1).max(MAX_JOB_TEXT_LENGTH),
   jobTypeId: z.string().min(1),
   driverId: z.string().min(1),
   businessId: z.string().min(1).optional(),
-  pickupAddress: z.string().trim().optional(),
+  pickupAddress: z.string().trim().max(MAX_JOB_TEXT_LENGTH).optional(),
   customerPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
-  // One pickup, any number of delivery stops, in route order.
-  dropoffAddresses: z.array(z.string().trim().min(1)).optional(),
-  notes: z.string().trim().optional(),
+  // One pickup, any number of delivery stops, in route order — capped so a
+  // single job can't force an unbounded JobStop bulk-insert.
+  dropoffAddresses: z.array(z.string().trim().min(1).max(MAX_JOB_TEXT_LENGTH)).max(MAX_DROPOFF_STOPS).optional(),
+  notes: z.string().trim().max(MAX_JOB_NOTES_LENGTH).optional(),
 });
 
 export async function POST(req: NextRequest) {

@@ -161,6 +161,12 @@ model JobStop {
   @@index([jobId, sequence])
 }
 
+// A hand-written partial unique index — CREATE UNIQUE INDEX ... WHERE
+// "clockOutAt" IS NULL, see migrations/20260727195557_prevent_concurrent_open_shifts —
+// enforces "at most one open shift per driver" at the DB level. Not
+// expressible as a @@unique here since Prisma's schema DSL has no partial-
+// index syntax; `prisma db pull` would show it, `prisma migrate dev` won't
+// try to drop it since it's already applied and the schema hasn't diverged.
 model TimeEntry {
   id          String    @id @default(cuid())
   driverId    String
