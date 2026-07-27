@@ -404,8 +404,11 @@ export function DriverJobsScreen() {
     }
   }
 
-  if (initialLoading) return <CenteredSpinner />;
-
+  // Must run on every render, including the initialLoading one below — a
+  // hook called only after that early return fires on some renders and not
+  // others, which is exactly what triggered "Rendered more hooks than
+  // during the previous render" (React requires every hook to run
+  // unconditionally, in the same order, on every render of a component).
   const renderItem = useCallback(
     ({ item }: { item: Job }) => (
       <JobCard
@@ -422,6 +425,8 @@ export function DriverJobsScreen() {
     ),
     [selectionMode, selectedIds, queuedIds, updatingId, currentJobId, toggleSelected, advance, handleMarkFailed]
   );
+
+  if (initialLoading) return <CenteredSpinner />;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
