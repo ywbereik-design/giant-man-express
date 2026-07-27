@@ -1,6 +1,7 @@
 node_modules
 .next
 .env
+.env.test
 *.db
 *.db-journal
 dev.db

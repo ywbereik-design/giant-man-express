@@ -53,12 +53,25 @@ function canFail(status: JobStatus): boolean {
   return status === "ACCEPTED" || status === "ARRIVED" || status === "PICKED_UP" || status === "ON_THE_WAY";
 }
 
+// Ranks the active, in-progress statuses by how close they are to needing
+// live navigation right now — used to pick the single "current" job (see
+// currentJobId below) when a driver has more than one active at once.
+const ROUTE_PRIORITY: Partial<Record<JobStatus, number>> = {
+  ON_THE_WAY: 4,
+  PICKED_UP: 3,
+  ARRIVED: 2,
+  ACCEPTED: 1,
+};
+
 interface JobCardProps {
   item: Job;
   selectionMode: boolean;
   selected: boolean;
   isQueued: boolean;
   isUpdating: boolean;
+  // Only this one job (of possibly several active at once) renders a live
+  // MapView — see the comment on currentJobId in DriverJobsScreen for why.
+  isCurrentRoute: boolean;
   onToggleSelect: (jobId: string) => void;
   onAdvance: (job: Job) => void;
   onMarkFailed: (job: Job) => void;
@@ -78,6 +91,7 @@ const JobCard = memo(function JobCard({
   selected,
   isQueued,
   isUpdating,
+  isCurrentRoute,
   onToggleSelect,
   onAdvance,
   onMarkFailed,
@@ -119,7 +133,14 @@ const JobCard = memo(function JobCard({
         />
       ))}
       {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
-      {destination && <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />}
+      {destination && isCurrentRoute && (
+        <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />
+      )}
+      {destination && !isCurrentRoute && (
+        <Text style={styles.mapHint}>
+          Live map shown for your current stop only — tap an address above to navigate there instead.
+        </Text>
+      )}
       {reachedStages.length > 0 && (
         <View style={styles.stageRow}>
           {reachedStages.map((s) => (
@@ -205,6 +226,34 @@ export function DriverJobsScreen() {
       netInfoSub();
     };
   }, [syncQueue]);
+
+  // The single job (of possibly several active at once) that gets a live
+  // route map. Previously every active job with a destination mounted its
+  // own MapView + its own GPS watcher simultaneously — with even 2-3 active
+  // jobs that meant 2-3 concurrent native maps rendering at once, which was
+  // the dominant real-world lag source on a driver's device. Picks whichever
+  // job is furthest along (ON_THE_WAY beats ACCEPTED, etc. — see
+  // ROUTE_PRIORITY), since that's the one actually being driven to right
+  // now; ties broken by whichever was accepted first.
+  const currentJobId = useMemo(() => {
+    let best: Job | null = null;
+    for (const job of jobs) {
+      const priority = ROUTE_PRIORITY[job.status];
+      if (!priority || !routeDestination(job)) continue;
+      if (!best) {
+        best = job;
+        continue;
+      }
+      const bestPriority = ROUTE_PRIORITY[best.status] ?? 0;
+      if (
+        priority > bestPriority ||
+        (priority === bestPriority && (job.acceptedAt ?? "") < (best.acceptedAt ?? ""))
+      ) {
+        best = job;
+      }
+    }
+    return best?.id ?? null;
+  }, [jobs]);
 
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
@@ -365,12 +414,13 @@ export function DriverJobsScreen() {
         selected={selectedIds.has(item.id)}
         isQueued={queuedIds.has(item.id)}
         isUpdating={updatingId === item.id}
+        isCurrentRoute={item.id === currentJobId}
         onToggleSelect={toggleSelected}
         onAdvance={advance}
         onMarkFailed={handleMarkFailed}
       />
     ),
-    [selectionMode, selectedIds, queuedIds, updatingId, toggleSelected, advance, handleMarkFailed]
+    [selectionMode, selectedIds, queuedIds, updatingId, currentJobId, toggleSelected, advance, handleMarkFailed]
   );
 
   return (
@@ -433,6 +483,7 @@ const styles = StyleSheet.create({
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
   stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
+  mapHint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.sm, fontStyle: "italic" },
   failureText: { color: colors.danger, fontSize: 13, fontWeight: "600", marginTop: spacing.xs },
   notice: { color: colors.primary, marginBottom: spacing.md, fontSize: 13 },
   queuedText: { color: colors.primary, fontSize: 12, marginTop: spacing.sm, fontStyle: "italic" },

@@ -100,9 +100,24 @@ const expoConfig = {
       // the full set of native modules this app depends on is documented
       // in one place, matching expo-location/expo-image-picker above.
       "expo-task-manager",
+      // Lets an EAS "development" build (see eas.json) load JS from this
+      // machine's Metro server the same way Expo Go does — without it, a
+      // dev build is just a static release build with no way to connect
+      // back to `npx expo start`.
+      "expo-dev-client",
     ],
 };
 
 module.exports = {
-  expo: withWhatsAppQuery(expoConfig),
+  expo: {
+    ...withWhatsAppQuery(expoConfig),
+    // Filled in by `eas init` (or `eas build:configure`) the first time you
+    // run it — paste the projectId it prints here. Builds will fail with
+    // "no EAS project" until this is set.
+    extra: {
+      eas: {
+        projectId: process.env.EAS_PROJECT_ID ?? "",
+      },
+    },
+  },
 };
