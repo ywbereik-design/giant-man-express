@@ -46,20 +46,46 @@ export async function createJobType() {
   return prisma.jobType.create({ data: { name: unique("JobType"), active: true } });
 }
 
+export async function createBusiness(overrides: Partial<{ billingRate: number | null }> = {}) {
+  return prisma.business.create({
+    data: {
+      name: unique("Business"),
+      billingRate: overrides.billingRate === undefined ? 50 : overrides.billingRate,
+    },
+  });
+}
+
 export async function createJob(overrides: {
   driverId: string;
   jobTypeId: string;
+  businessId?: string;
   status?: string;
   pickedUpAt?: Date;
+  deliveredAt?: Date;
 }) {
   return prisma.job.create({
     data: {
       title: unique("Job"),
       jobTypeId: overrides.jobTypeId,
       driverId: overrides.driverId,
+      businessId: overrides.businessId,
       status: overrides.status ?? "ASSIGNED",
       pickedUpAt: overrides.pickedUpAt,
+      deliveredAt: overrides.deliveredAt,
     },
+  });
+}
+
+// The test DB is only truncated once per whole `vitest run`, not per test —
+// so by the time a "last active admin" test runs, other tests may have
+// already created plenty of other ADMIN rows. That guard is a genuinely
+// global invariant (it counts every StaffUser row, not a per-test subset),
+// so any test asserting it needs to first make that precondition actually
+// true rather than assume test-file isolation that doesn't exist here.
+export async function deactivateAllOtherAdmins(...exceptIds: string[]): Promise<void> {
+  await prisma.staffUser.updateMany({
+    where: { role: "ADMIN", active: true, id: { notIn: exceptIds } },
+    data: { active: false },
   });
 }
 

@@ -33,13 +33,16 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.10"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "private": true,
   "expo": {

@@ -21,7 +21,7 @@ export interface QueuedJobUpdate {
 // unbounded. Dropping the oldest pending update on overflow rather than
 // refusing the newest one, since the newest is the action the driver just
 // took and is the one most likely to still be actionable.
-const MAX_QUEUE_ITEMS = 20;
+export const MAX_QUEUE_ITEMS = 20;
 
 const queueFile = new File(Paths.document, "pending-job-updates.json");
 

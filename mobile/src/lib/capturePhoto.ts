@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 
-const TARGET_MAX_BYTES = 500 * 1024;
+export const TARGET_MAX_BYTES = 500 * 1024;
 
 // Quality/width pairs tried in order, most detail-preserving first, until
 // the encoded photo lands at or under the 500KB ceiling — stepping quality
@@ -9,7 +9,7 @@ const TARGET_MAX_BYTES = 500 * 1024;
 // phone screen than a smaller image. A plain, low-detail photo may land
 // under 200KB even on the first step; that's fine — the floor is a rough
 // target, not something worth upscaling or over-compressing to hit.
-const COMPRESSION_STEPS: { width: number; compress: number }[] = [
+export const COMPRESSION_STEPS: { width: number; compress: number }[] = [
   { width: 1024, compress: 0.7 },
   { width: 1024, compress: 0.55 },
   { width: 1024, compress: 0.4 },
@@ -19,7 +19,10 @@ const COMPRESSION_STEPS: { width: number; compress: number }[] = [
 ];
 
 // 4 base64 chars encode 3 bytes; strip padding for an exact byte count.
-function base64ByteSize(base64: string): number {
+// Exported for direct unit testing — the padding-aware math here is the
+// most bug-prone part of the compression loop (an off-by-one here would
+// silently pick the wrong step every time).
+export function base64ByteSize(base64: string): number {
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
   return (base64.length / 4) * 3 - padding;
 }
