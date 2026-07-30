@@ -7,8 +7,10 @@ import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
 export async function GET(req: NextRequest) {
   // Dispatch can see the client list (needed to assign jobs to a business)
-  // but not financial details like billing rate — that stays ADMIN-only.
-  const auth = await requireRole(req, ["ADMIN", "DISPATCH"]);
+  // but not financial details like billing rate — that stays ADMIN/
+  // ACCOUNTANT-only. Checked by role below (not a separate allow-list),
+  // so ACCOUNTANT falls through to the full-access branch same as ADMIN.
+  const auth = await requireRole(req, ["ADMIN", "DISPATCH", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   if (auth.session.role === "DISPATCH") {
@@ -32,7 +34,7 @@ const createSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const body = await parseBody(req, createSchema);

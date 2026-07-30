@@ -41,7 +41,7 @@ function getSecret() {
   return encoder.encode(secret);
 }
 
-export type Role = "ADMIN" | "DISPATCH" | "DRIVER";
+export type Role = "ADMIN" | "DISPATCH" | "ACCOUNTANT" | "DRIVER";
 
 export interface SessionPayload {
   sub: string;
@@ -98,12 +98,12 @@ export async function requireRole(
 
   // A staff member's role can change (or their account can be deactivated or
   // deleted) after their token was issued, and tokens stay valid for up to 30
-  // days — so for ADMIN/DISPATCH sessions, re-check the *current* role and
+  // days — so for every staff-backed role, re-check the *current* role and
   // active status in the database rather than trusting the JWT's claims.
   // Without this, a demoted, deactivated, or deleted staff member's existing
   // token would keep working until it expired.
   let currentSession = session;
-  if (session.role === "ADMIN" || session.role === "DISPATCH") {
+  if (session.role === "ADMIN" || session.role === "DISPATCH" || session.role === "ACCOUNTANT") {
     const staff = await prisma.staffUser.findUnique({
       where: { id: session.sub },
       select: { role: true, active: true, tokenVersion: true },

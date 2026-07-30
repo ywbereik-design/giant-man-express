@@ -7,7 +7,7 @@ import { InvoiceDocument } from "@/lib/pdf/InvoiceDocument";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const invoice = await prisma.invoice.findUnique({

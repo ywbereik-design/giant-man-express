@@ -15,7 +15,7 @@ export const FAILURE_REASONS = [
   "Location Closed",
 ] as const;
 export type FailureReason = (typeof FAILURE_REASONS)[number];
-export type StaffRole = "ADMIN" | "DISPATCH";
+export type StaffRole = "ADMIN" | "DISPATCH" | "ACCOUNTANT";
 
 export interface Driver {
   id: string;

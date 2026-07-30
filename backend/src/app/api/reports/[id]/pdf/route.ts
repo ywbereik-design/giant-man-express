@@ -7,7 +7,7 @@ import { HoursReportDocument, HoursReportEntryRow } from "@/lib/pdf/HoursReportD
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const report = await prisma.hoursReport.findUnique({

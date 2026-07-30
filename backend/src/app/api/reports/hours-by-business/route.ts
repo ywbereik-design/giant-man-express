@@ -21,7 +21,7 @@ const querySchema = z
 // *reference* only — it does not feed Invoice generation, which remains a
 // flat rate per delivered job (see /api/invoices) and is left untouched.
 export async function GET(req: NextRequest) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const { searchParams } = new URL(req.url);

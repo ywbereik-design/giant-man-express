@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const auth =
-    session.role === "DRIVER" ? await requireActiveDriver(req) : await requireRole(req, ["ADMIN", "DISPATCH"]);
+    session.role === "DRIVER" ? await requireActiveDriver(req) : await requireRole(req, ["ADMIN", "DISPATCH", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   return Response.json({ id: auth.session.sub, role: auth.session.role, name: auth.session.name });

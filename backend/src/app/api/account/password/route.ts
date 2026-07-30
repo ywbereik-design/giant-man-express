@@ -14,7 +14,7 @@ const schema = z.object({
 });
 
 export async function PATCH(req: NextRequest) {
-  const auth = await requireRole(req, ["ADMIN", "DISPATCH"]);
+  const auth = await requireRole(req, ["ADMIN", "DISPATCH", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const body = await parseBody(req, schema);

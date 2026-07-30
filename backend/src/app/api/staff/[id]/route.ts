@@ -5,7 +5,7 @@ import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
-const STAFF_ROLES = ["ADMIN", "DISPATCH"] as const;
+const STAFF_ROLES = ["ADMIN", "DISPATCH", "ACCOUNTANT"] as const;
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
@@ -34,7 +34,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (isError(body)) return body.error;
   const { password, role, active, ...rest } = body.data;
 
-  const demotingOrDeactivating = role === "DISPATCH" || active === false;
+  // Any role change away from ADMIN counts as a demotion for this guard —
+  // written this way (rather than listing each non-admin role) so adding a
+  // future role can't silently bypass the last-admin check the way hardcoding
+  // just "DISPATCH" already almost did when ACCOUNTANT was added.
+  const demotingOrDeactivating = (role !== undefined && role !== "ADMIN") || active === false;
   if (demotingOrDeactivating && (await wouldRemoveLastActiveAdmin(params.id))) {
     return Response.json(
       { error: "Can't change or deactivate the last remaining admin account" },

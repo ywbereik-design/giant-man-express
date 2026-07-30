@@ -6,6 +6,7 @@ import { LoginScreen } from "../screens/LoginScreen";
 import { DriverNavigator } from "./DriverNavigator";
 import { AdminNavigator } from "./AdminNavigator";
 import { DispatchNavigator } from "./DispatchNavigator";
+import { AccountantNavigator } from "./AccountantNavigator";
 import { colors } from "../theme/theme";
 
 const navTheme = {
@@ -36,6 +37,7 @@ export function RootNavigator() {
     if (!session) return <LoginScreen />;
     if (session.role === "DRIVER") return <DriverNavigator />;
     if (session.role === "DISPATCH") return <DispatchNavigator />;
+    if (session.role === "ACCOUNTANT") return <AccountantNavigator />;
     return <AdminNavigator />;
   }
 

@@ -5,7 +5,7 @@ import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
-const STAFF_ROLES = ["ADMIN", "DISPATCH"] as const;
+const STAFF_ROLES = ["ADMIN", "DISPATCH", "ACCOUNTANT"] as const;
 
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, "ADMIN");

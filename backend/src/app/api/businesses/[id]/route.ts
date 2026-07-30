@@ -14,7 +14,7 @@ const updateSchema = z.object({
 });
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const business = await prisma.business.findUnique({ where: { id: params.id } });
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const body = await parseBody(req, updateSchema);

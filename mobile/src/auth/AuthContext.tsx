@@ -5,7 +5,7 @@ import { api, ApiError, setAuthToken, setSessionExpiredHandler } from "../api/cl
 import { SESSION_STORAGE_KEY } from "./storage";
 import { stopShiftTracking } from "../location/shiftTracking";
 
-export type Role = "ADMIN" | "DISPATCH" | "DRIVER";
+export type Role = "ADMIN" | "DISPATCH" | "ACCOUNTANT" | "DRIVER";
 
 interface Session {
   token: string;

@@ -6,11 +6,12 @@ import { colors, spacing } from "../theme/theme";
 import { ApiError } from "../api/client";
 import { isValidEmail } from "../lib/validation";
 
-type Mode = "ADMIN" | "DISPATCH" | "DRIVER";
+type Mode = "ADMIN" | "DISPATCH" | "ACCOUNTANT" | "DRIVER";
 
 const MODES: { id: Mode; label: string; subtitle: string }[] = [
   { id: "ADMIN", label: "Admin", subtitle: "Full system access — settings, reports & invoices" },
   { id: "DISPATCH", label: "Dispatch", subtitle: "View & assign jobs, monitor drivers" },
+  { id: "ACCOUNTANT", label: "Accountant", subtitle: "Invoices, hours reports & client billing" },
   { id: "DRIVER", label: "Driver", subtitle: "Clock in/out and manage your assigned jobs" },
 ];
 
@@ -24,7 +25,7 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const isStaffMode = mode === "ADMIN" || mode === "DISPATCH";
+  const isStaffMode = mode === "ADMIN" || mode === "DISPATCH" || mode === "ACCOUNTANT";
   const activeMode = MODES.find((m) => m.id === mode)!;
 
   function switchMode(next: Mode) {

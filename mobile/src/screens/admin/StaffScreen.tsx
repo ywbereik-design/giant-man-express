@@ -12,7 +12,11 @@ import { colors, spacing } from "../../theme/theme";
 const ROLE_OPTIONS: { id: StaffRole; label: string }[] = [
   { id: "ADMIN", label: "Admin" },
   { id: "DISPATCH", label: "Dispatch" },
+  { id: "ACCOUNTANT", label: "Accountant" },
 ];
+
+const ROLE_LABEL: Record<StaffRole, string> = { ADMIN: "Admin", DISPATCH: "Dispatch", ACCOUNTANT: "Accountant" };
+const ROLE_TONE: Record<StaffRole, "info" | "muted"> = { ADMIN: "info", DISPATCH: "muted", ACCOUNTANT: "muted" };
 
 export function StaffScreen() {
   const { session } = useAuth();
@@ -204,7 +208,7 @@ export function StaffScreen() {
                 <Text style={styles.meta}>{item.email}</Text>
               </View>
               <View style={{ alignItems: "flex-end", gap: spacing.xs }}>
-                <Badge text={item.role === "ADMIN" ? "Admin" : "Dispatch"} tone={item.role === "ADMIN" ? "info" : "muted"} />
+                <Badge text={ROLE_LABEL[item.role]} tone={ROLE_TONE[item.role]} />
                 <Badge text={item.active ? "Active" : "Inactive"} tone={item.active ? "success" : "muted"} />
               </View>
             </View>

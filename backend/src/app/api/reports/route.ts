@@ -7,7 +7,7 @@ import { nextNumber } from "@/lib/numbering";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
 export async function GET(req: NextRequest) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const { searchParams } = new URL(req.url);
@@ -34,7 +34,7 @@ const createSchema = z
   });
 
 export async function POST(req: NextRequest) {
-  const auth = await requireRole(req, "ADMIN");
+  const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
 
   const body = await parseBody(req, createSchema);
