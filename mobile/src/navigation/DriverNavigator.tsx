@@ -8,8 +8,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { WelcomeScreen } from "../screens/driver/WelcomeScreen";
 import { HomeScreen } from "../screens/driver/HomeScreen";
 import { DriverJobsScreen } from "../screens/driver/JobsScreen";
+import { JobDetailsScreen } from "../screens/driver/JobDetailsScreen";
 import { HistoryScreen } from "../screens/driver/HistoryScreen";
 import { LocationScreen } from "../screens/driver/LocationScreen";
+import type { Job } from "../api/types";
 import { DriverTopTabBar } from "./DriverTopTabBar";
 import { DriverTabBarHeightContext } from "./DriverTabBarHeightContext";
 import { LogoutButton } from "./LogoutButton";
@@ -27,6 +29,14 @@ export type DriverStackParamList = {
   // Lets WelcomeScreen's cards deep-link straight into a specific tab, e.g.
   // navigation.navigate("Main", { screen: "Jobs" }).
   Main: NavigatorScreenParams<DriverTabParamList> | undefined;
+  // Pushed on top of Main (a sibling of it, not nested inside the Jobs tab)
+  // so it gets a full-screen takeover without the DriverTopTabBar — reached
+  // via navigation.getParent() from inside the Jobs tab, the same pattern
+  // DriverTopTabBar's own back button already uses. Takes the job object
+  // directly (already in memory in the Jobs list) rather than an id, since
+  // there's no single-job GET endpoint and adding one isn't needed just to
+  // view data the app already has.
+  JobDetails: { job: Job };
 };
 
 const Tab = createBottomTabNavigator<DriverTabParamList>();
@@ -132,6 +142,7 @@ export function DriverNavigator() {
         }}
       />
       <Stack.Screen name="Main" component={DriverTabs} options={{ headerShown: false }} />
+      <Stack.Screen name="JobDetails" component={JobDetailsScreen} options={{ title: "Job Details" }} />
     </Stack.Navigator>
   );
 }

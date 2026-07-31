@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { AppState, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../../api/client";
@@ -16,8 +16,11 @@ import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
 import { CustomerContactButtons } from "../../components/CustomerContactButtons";
 import { AddressRow } from "../../components/AddressRow";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
-import { enqueueJobUpdate, flushQueuedJobUpdates, getQueuedJobIds } from "../../lib/offlineQueue";
+import { flushQueuedJobUpdates, getQueuedJobIds } from "../../lib/offlineQueue";
+import { submitJobStatus } from "../../lib/submitJobStatus";
 import * as ImagePicker from "expo-image-picker";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { DriverStackParamList } from "../../navigation/DriverNavigator";
 
 const NEXT_ACTION: Partial<Record<JobStatus, { label: string; next: JobStatus }>> = {
   ASSIGNED: { label: "Accept Job", next: "ACCEPTED" },
@@ -75,6 +78,7 @@ interface JobCardProps {
   onToggleSelect: (jobId: string) => void;
   onAdvance: (job: Job) => void;
   onMarkFailed: (job: Job) => void;
+  onViewDetails: (job: Job) => void;
 }
 
 // Memoized so that a change elsewhere on screen (toggling one other card's
@@ -95,6 +99,7 @@ const JobCard = memo(function JobCard({
   onToggleSelect,
   onAdvance,
   onMarkFailed,
+  onViewDetails,
 }: JobCardProps) {
   const action = NEXT_ACTION[item.status];
   const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
@@ -106,74 +111,91 @@ const JobCard = memo(function JobCard({
   const batchEligible = !!action && BATCH_ALLOWED_STATUSES.includes(action.next) && !isQueued;
 
   return (
-    <Card>
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          {selectionMode && batchEligible && (
-            <Pressable onPress={() => onToggleSelect(item.id)} hitSlop={8} style={styles.checkbox}>
-              <Ionicons
-                name={selected ? "checkbox" : "square-outline"}
-                size={20}
-                color={selected ? colors.primary : colors.textMuted}
+    <Pressable onPress={selectionMode ? undefined : () => onViewDetails(item)}>
+      <Card>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            {selectionMode && batchEligible && (
+              <Pressable onPress={() => onToggleSelect(item.id)} hitSlop={8} style={styles.checkbox}>
+                <Ionicons
+                  name={selected ? "checkbox" : "square-outline"}
+                  size={20}
+                  color={selected ? colors.primary : colors.textMuted}
+                />
+              </Pressable>
+            )}
+            <Badge text={item.jobType.name} />
+          </View>
+          <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
+        </View>
+        <Text style={styles.title}>{item.title}</Text>
+        {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
+        {item.pickupAddress && <AddressRow label="Pickup: " address={item.pickupAddress} />}
+        {item.dropoffStops.map((stop, i) => (
+          <AddressRow
+            key={stop.id}
+            label={item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+            address={stop.address}
+          />
+        ))}
+        {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
+        {destination && isCurrentRoute && (
+          <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />
+        )}
+        {destination && !isCurrentRoute && (
+          <Text style={styles.mapHint}>
+            Live map shown for your current stop only — tap an address above to navigate there instead.
+          </Text>
+        )}
+        {reachedStages.length > 0 && (
+          <View style={styles.stageRow}>
+            {reachedStages.map((s) => (
+              <Badge
+                key={s.field}
+                text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
+                tone="muted"
               />
-            </Pressable>
-          )}
-          <Badge text={item.jobType.name} />
-        </View>
-        <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
-      </View>
-      <Text style={styles.title}>{item.title}</Text>
-      {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-      {item.pickupAddress && <AddressRow label="Pickup: " address={item.pickupAddress} />}
-      {item.dropoffStops.map((stop, i) => (
-        <AddressRow
-          key={stop.id}
-          label={item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-          address={stop.address}
-        />
-      ))}
-      {item.notes && <Text style={styles.meta}>Notes: {item.notes}</Text>}
-      {destination && isCurrentRoute && (
-        <DriverRouteMap destinationAddress={destination.address} destinationLabel={destination.label} />
-      )}
-      {destination && !isCurrentRoute && (
-        <Text style={styles.mapHint}>
-          Live map shown for your current stop only — tap an address above to navigate there instead.
-        </Text>
-      )}
-      {reachedStages.length > 0 && (
-        <View style={styles.stageRow}>
-          {reachedStages.map((s) => (
-            <Badge
-              key={s.field}
-              text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
-              tone="muted"
-            />
-          ))}
-        </View>
-      )}
-      {item.status === "FAILED" && item.failureReason && <Text style={styles.failureText}>Failed: {item.failureReason}</Text>}
-      {item.customerPhone && action && !selectionMode && <CustomerContactButtons phone={item.customerPhone} />}
-      {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
-      {action && !selectionMode && (
-        <View style={{ marginTop: spacing.sm }}>
-          <Button title={action.label} onPress={() => onAdvance(item)} loading={isUpdating} disabled={isQueued} />
-          {canFail(item.status) && (
-            <Button
-              title="Mark Failed / Undelivered"
-              variant="danger"
-              onPress={() => onMarkFailed(item)}
-              disabled={isQueued || isUpdating}
-            />
-          )}
-        </View>
-      )}
-    </Card>
+            ))}
+          </View>
+        )}
+        {item.status === "FAILED" && item.failureReason && <Text style={styles.failureText}>Failed: {item.failureReason}</Text>}
+        {item.customerPhone && action && !selectionMode && <CustomerContactButtons phone={item.customerPhone} />}
+        {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
+        {/* Accepting a job only happens on the Job Details screen now (via
+            the swipe-to-accept gesture there), not from a plain button here —
+            see JobDetailsScreen.tsx. Every other in-progress action stays on
+            the card. */}
+        {action && item.status !== "ASSIGNED" && !selectionMode && (
+          <View style={{ marginTop: spacing.sm }}>
+            <Button title={action.label} onPress={() => onAdvance(item)} loading={isUpdating} disabled={isQueued} />
+            {canFail(item.status) && (
+              <Button
+                title="Mark Failed / Undelivered"
+                variant="danger"
+                onPress={() => onMarkFailed(item)}
+                disabled={isQueued || isUpdating}
+              />
+            )}
+          </View>
+        )}
+        {item.status === "ASSIGNED" && !selectionMode && (
+          <Text style={styles.tapHint}>Tap to view details and accept this job</Text>
+        )}
+      </Card>
+    </Pressable>
   );
 });
 
 export function DriverJobsScreen() {
   const tabBarHeight = useDriverTabBarHeight();
+  // Jobs lives inside the bottom-tab navigator (Main), so JobDetails — a
+  // sibling of Main, not nested inside it — is reached via the parent
+  // stack, the same pattern DriverTopTabBar's own back button already uses.
+  const navigation = useNavigation();
+  const viewDetails = useCallback(
+    (job: Job) => navigation.getParent<NativeStackNavigationProp<DriverStackParamList>>()?.navigate("JobDetails", { job }),
+    [navigation]
+  );
   const [jobs, setJobs] = useState<Job[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -311,28 +333,24 @@ export function DriverJobsScreen() {
   }
 
   // Shared by the normal Accept/Arrived/.../Delivered flow and the offline
-  // queue's retry path — sends the status update, and on a network failure
-  // (not a rejection) queues it for later instead of surfacing a hard error.
-  // useCallback with no deps: every closed-over setter is stable, so this
-  // never needs a new identity — which lets `advance` below stay stable too.
+  // queue's retry path — delegates the actual send/queue decision to
+  // submitJobStatus (shared with JobDetailsScreen's swipe-to-accept) and
+  // just layers this screen's own UI feedback (the "you're offline" notice,
+  // refreshing queuedIds) on top. useCallback with no deps: every closed-
+  // over setter is stable, so this never needs a new identity — which lets
+  // `advance` below stay stable too.
   const sendStatusUpdate = useCallback(
     async (
       job: Job,
       status: JobStatus,
       extra: { photo?: string; lat?: number; lng?: number; failureReason?: FailureReason }
     ): Promise<boolean> => {
-      try {
-        await api.patch(`/api/driver/jobs/${job.id}/status`, { status, ...extra });
-        return true;
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 0) {
-          enqueueJobUpdate({ jobId: job.id, status, ...extra });
-          setQueuedIds(getQueuedJobIds());
-          setNotice("You're offline — this update is saved and will sync automatically once you're back online.");
-          return false;
-        }
-        throw e;
+      const result = await submitJobStatus(job.id, status, extra);
+      if (!result.sent) {
+        setQueuedIds(getQueuedJobIds());
+        setNotice("You're offline — this update is saved and will sync automatically once you're back online.");
       }
+      return result.sent;
     },
     []
   );
@@ -421,9 +439,10 @@ export function DriverJobsScreen() {
         onToggleSelect={toggleSelected}
         onAdvance={advance}
         onMarkFailed={handleMarkFailed}
+        onViewDetails={viewDetails}
       />
     ),
-    [selectionMode, selectedIds, queuedIds, updatingId, currentJobId, toggleSelected, advance, handleMarkFailed]
+    [selectionMode, selectedIds, queuedIds, updatingId, currentJobId, toggleSelected, advance, handleMarkFailed, viewDetails]
   );
 
   if (initialLoading) return <CenteredSpinner />;
@@ -492,6 +511,7 @@ const styles = StyleSheet.create({
   failureText: { color: colors.danger, fontSize: 13, fontWeight: "600", marginTop: spacing.xs },
   notice: { color: colors.primary, marginBottom: spacing.md, fontSize: 13 },
   queuedText: { color: colors.primary, fontSize: 12, marginTop: spacing.sm, fontStyle: "italic" },
+  tapHint: { color: colors.primary, fontSize: 13, fontWeight: "600", marginTop: spacing.sm },
   selectionToggleRow: { alignItems: "flex-end", marginBottom: spacing.sm },
   selectionToggleText: { color: colors.primary, fontSize: 13, fontWeight: "600" },
   batchBar: {
