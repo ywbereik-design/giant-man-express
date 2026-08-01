@@ -31,7 +31,7 @@ export const DRIVER_ALLOWED_TRANSITIONS: Record<string, JobStatus[]> = {
 export const FAILURE_REASONS = [
   "No Answer",
   "Incorrect Address",
-  "Customer Rescheduled",
+  "Client Rescheduled",
   "Location Closed",
 ] as const;
 export type FailureReason = (typeof FAILURE_REASONS)[number];

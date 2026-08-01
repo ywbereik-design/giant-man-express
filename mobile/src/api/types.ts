@@ -11,7 +11,7 @@ export type JobStatus =
 export const FAILURE_REASONS = [
   "No Answer",
   "Incorrect Address",
-  "Customer Rescheduled",
+  "Client Rescheduled",
   "Location Closed",
 ] as const;
 export type FailureReason = (typeof FAILURE_REASONS)[number];
@@ -92,7 +92,7 @@ export interface Job {
   pickupAddress: string | null;
   // Recipient's phone, used for the driver's one-touch Call / WhatsApp
   // buttons — null for jobs without a reachable contact on file.
-  customerPhone: string | null;
+  clientPhone: string | null;
   // Any number of delivery locations, in route order.
   dropoffStops: JobStop[];
   notes: string | null;

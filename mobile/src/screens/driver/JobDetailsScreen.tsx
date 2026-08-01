@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { ApiError } from "../../api/client";
 import { Badge, Card, ErrorText } from "../../components/ui";
 import { AddressRow } from "../../components/AddressRow";
-import { CustomerContactButtons } from "../../components/CustomerContactButtons";
+import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { SwipeToAccept } from "../../components/SwipeToAccept";
 import { submitJobStatus } from "../../lib/submitJobStatus";
 import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
@@ -70,11 +70,11 @@ export function JobDetailsScreen({ route, navigation }: Props) {
           <Text style={styles.meta}>{job.notes || "No additional notes for this job."}</Text>
         </Card>
 
-        {job.customerPhone && (
+        {job.clientPhone && (
           <Card>
-            <Text style={styles.sectionTitle}>Customer Contact</Text>
-            <Text style={styles.meta}>{job.customerPhone}</Text>
-            <CustomerContactButtons phone={job.customerPhone} />
+            <Text style={styles.sectionTitle}>Client Contact</Text>
+            <Text style={styles.meta}>{job.clientPhone}</Text>
+            <ClientContactButtons phone={job.clientPhone} />
           </Card>
         )}
 

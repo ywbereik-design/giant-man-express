@@ -71,7 +71,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const photoField = PHOTO_REQUIRED_ON[nextStatus];
-  if (photoField && !body.data.photo) {
+  // A pickup photo is only meaningful proof against an actual pickup
+  // location — if dispatch never set one on the job, don't force a photo.
+  // Delivery stays unconditionally required (every job has a dropoff).
+  const photoRequired = photoField === "pickupPhoto" ? Boolean(job.pickupAddress) : Boolean(photoField);
+  if (photoRequired && !body.data.photo) {
     const label = photoField === "pickupPhoto" ? "pickup" : "delivery";
     return Response.json({ error: `A ${label} photo is required` }, { status: 400 });
   }

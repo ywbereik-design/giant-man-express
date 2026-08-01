@@ -85,23 +85,23 @@ model Business {
 // (validated in application code — see src/lib/constants.ts)
 
 model Job {
-  id             String    @id @default(cuid())
-  title          String
-  jobTypeId      String
-  jobType        JobType   @relation(fields: [jobTypeId], references: [id])
-  driverId       String
-  driver         Driver    @relation(fields: [driverId], references: [id])
-  businessId     String?
-  business       Business? @relation(fields: [businessId], references: [id])
-  pickupAddress  String?
+  id            String    @id @default(cuid())
+  title         String
+  jobTypeId     String
+  jobType       JobType   @relation(fields: [jobTypeId], references: [id])
+  driverId      String
+  driver        Driver    @relation(fields: [driverId], references: [id])
+  businessId    String?
+  business      Business? @relation(fields: [businessId], references: [id])
+  pickupAddress String?
   // The recipient's phone number, used for the driver's one-touch Call /
   // WhatsApp buttons on their job card. Optional — jobs created before this
   // field existed, or without a reachable contact, simply don't show those
   // buttons.
-  customerPhone  String?
-  notes          String?
-  status         String    @default("ASSIGNED")
-  createdAt      DateTime  @default(now())
+  clientPhone   String?
+  notes         String?
+  status        String    @default("ASSIGNED")
+  createdAt     DateTime  @default(now())
 
   // One pickup, any number of delivery stops — see JobStop below.
   dropoffStops JobStop[]
@@ -131,10 +131,10 @@ model Job {
   // already-server-timestamped pickedUpAt/deliveredAt above — lets
   // dispatch/admin verify a photo was actually taken at the job site rather
   // than trusting the image alone.
-  pickupLat    Float?
-  pickupLng    Float?
-  deliveryLat  Float?
-  deliveryLng  Float?
+  pickupLat   Float?
+  pickupLng   Float?
+  deliveryLat Float?
+  deliveryLng Float?
 
   // Required, driver-selected reason when status is set to FAILED (see
   // FAILURE_REASONS in src/lib/constants.ts) — e.g. "No Answer",
@@ -188,7 +188,7 @@ model TimeEntry {
   // while this shift was open. lastPingLat/Lng is the previous ping's
   // position, kept so each new ping only needs to add one segment rather
   // than replaying the whole route.
-  distanceKm  Float   @default(0)
+  distanceKm  Float  @default(0)
   lastPingLat Float?
   lastPingLng Float?
 
@@ -202,30 +202,30 @@ model TimeEntry {
 // history behind the admin live map / "today's mileage" view. Only ever
 // written while the parent TimeEntry is open (see POST /api/driver/location).
 model LocationPing {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   driverId    String
-  driver      Driver   @relation(fields: [driverId], references: [id])
+  driver      Driver    @relation(fields: [driverId], references: [id])
   timeEntryId String
   timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id])
   lat         Float
   lng         Float
-  recordedAt  DateTime @default(now())
+  recordedAt  DateTime  @default(now())
 
   @@index([timeEntryId, recordedAt])
   @@index([driverId, recordedAt])
 }
 
 model HoursReport {
-  id           String   @id @default(cuid())
-  reportNumber String   @unique
-  driverId     String
-  driver       Driver   @relation(fields: [driverId], references: [id])
-  periodStart  DateTime
-  periodEnd    DateTime
-  totalHours   Float
-  totalDistanceKm Float @default(0)
-  generatedAt  DateTime @default(now())
-  entriesJson  String // snapshot of the TimeEntry rows included, for a stable historical record
+  id              String   @id @default(cuid())
+  reportNumber    String   @unique
+  driverId        String
+  driver          Driver   @relation(fields: [driverId], references: [id])
+  periodStart     DateTime
+  periodEnd       DateTime
+  totalHours      Float
+  totalDistanceKm Float    @default(0)
+  generatedAt     DateTime @default(now())
+  entriesJson     String // snapshot of the TimeEntry rows included, for a stable historical record
 
   // Backstops the app-level duplicate check in POST /api/reports against a
   // race between two concurrent requests for the same driver+period (e.g. a

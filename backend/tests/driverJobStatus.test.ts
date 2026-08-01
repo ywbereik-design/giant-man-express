@@ -36,7 +36,25 @@ describe("PATCH /api/driver/jobs/[id]/status", () => {
     expect(res.status).toBe(400);
   });
 
-  it("requires a proof photo to move to PICKED_UP", async () => {
+  it("requires a proof photo to move to PICKED_UP when the job has a pickup address", async () => {
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      status: "ARRIVED",
+      pickupAddress: "123 Main St",
+    });
+    const token = await driverToken(driver.id, driver.name);
+
+    const res = await updateStatus(
+      jsonRequest(`/api/driver/jobs/${job.id}/status`, "PATCH", { status: "PICKED_UP" }, token),
+      { params: { id: job.id } }
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("does not require a proof photo to move to PICKED_UP when the job has no pickup address", async () => {
     const { driver } = await createDriver();
     const jobType = await createJobType();
     const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id, status: "ARRIVED" });
@@ -46,7 +64,10 @@ describe("PATCH /api/driver/jobs/[id]/status", () => {
       jsonRequest(`/api/driver/jobs/${job.id}/status`, "PATCH", { status: "PICKED_UP" }, token),
       { params: { id: job.id } }
     );
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.job.status).toBe("PICKED_UP");
+    expect(body.job.pickupPhoto).toBeNull();
   });
 
   it("stores the photo and GPS metadata together when PICKED_UP succeeds", async () => {

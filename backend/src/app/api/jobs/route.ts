@@ -45,7 +45,7 @@ const createSchema = z.object({
   driverId: z.string().min(1),
   businessId: z.string().min(1).optional(),
   pickupAddress: z.string().trim().max(MAX_JOB_TEXT_LENGTH).optional(),
-  customerPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
+  clientPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   // One pickup, any number of delivery stops, in route order — capped so a
   // single job can't force an unbounded JobStop bulk-insert.
   dropoffAddresses: z.array(z.string().trim().min(1).max(MAX_JOB_TEXT_LENGTH)).max(MAX_DROPOFF_STOPS).optional(),

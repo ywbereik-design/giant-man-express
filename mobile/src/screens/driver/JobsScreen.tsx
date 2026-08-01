@@ -13,7 +13,7 @@ import { routeDestination } from "../../lib/routeDestination";
 import { capturePhoto } from "../../lib/capturePhoto";
 import { getCoords } from "../../lib/getCoords";
 import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
-import { CustomerContactButtons } from "../../components/CustomerContactButtons";
+import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { AddressRow } from "../../components/AddressRow";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
 import { flushQueuedJobUpdates, getQueuedJobIds } from "../../lib/offlineQueue";
@@ -37,6 +37,17 @@ const PHOTO_REQUIRED_ON: Partial<Record<JobStatus, true>> = {
   PICKED_UP: true,
   DELIVERED: true,
 };
+
+// A pickup photo only makes sense as proof against an actual pickup
+// location — if dispatch never set one on the job, there's nothing to
+// prove a pickup happened at, so the driver can advance straight through
+// without the camera prompt. Delivery photos stay unconditionally required
+// (every job has at least one dropoff stop). Mirrors the backend's own
+// conditional check in /api/driver/jobs/[id]/status.
+function isPhotoRequired(nextStatus: JobStatus, job: Job): boolean {
+  if (nextStatus === "PICKED_UP") return Boolean(job.pickupAddress);
+  return Boolean(PHOTO_REQUIRED_ON[nextStatus]);
+}
 
 // Statuses a batch action can move several selected jobs into at once — the
 // same restriction the backend enforces (see BATCH_ALLOWED_STATUSES),
@@ -159,7 +170,7 @@ const JobCard = memo(function JobCard({
           </View>
         )}
         {item.status === "FAILED" && item.failureReason && <Text style={styles.failureText}>Failed: {item.failureReason}</Text>}
-        {item.customerPhone && action && !selectionMode && <CustomerContactButtons phone={item.customerPhone} />}
+        {item.clientPhone && action && !selectionMode && <ClientContactButtons phone={item.clientPhone} />}
         {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
         {/* Accepting a job only happens on the Job Details screen now (via
             the swipe-to-accept gesture there), not from a plain button here —
@@ -368,7 +379,7 @@ export function DriverJobsScreen() {
       let photo: string | undefined;
       let lat: number | undefined;
       let lng: number | undefined;
-      if (PHOTO_REQUIRED_ON[action.next]) {
+      if (isPhotoRequired(action.next, job)) {
         try {
           const captured = await capturePhoto(ImagePicker.CameraType.back);
           if (!captured) {

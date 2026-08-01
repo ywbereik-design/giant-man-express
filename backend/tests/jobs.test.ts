@@ -49,7 +49,7 @@ describe("POST /api/jobs", () => {
     expect(res.status).toBe(403);
   });
 
-  it("rejects an invalid customerPhone", async () => {
+  it("rejects an invalid clientPhone", async () => {
     const { staff } = await createStaff();
     const { driver } = await createDriver();
     const jobType = await createJobType();
@@ -58,7 +58,7 @@ describe("POST /api/jobs", () => {
       jsonRequest(
         "/api/jobs",
         "POST",
-        { title: "Test delivery", jobTypeId: jobType.id, driverId: driver.id, customerPhone: "call me maybe" },
+        { title: "Test delivery", jobTypeId: jobType.id, driverId: driver.id, clientPhone: "call me maybe" },
         token
       )
     );

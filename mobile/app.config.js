@@ -3,7 +3,7 @@ const { withAndroidManifest } = require("expo/config-plugins");
 // On Android 11+, an app can't see or launch another installed app unless
 // it's declared in a <queries> block — without this, Linking.openURL for a
 // whatsapp:// URL can silently fail on real devices (falling into
-// CustomerContactButtons' "not available" catch) even with WhatsApp
+// ClientContactButtons' "not available" catch) even with WhatsApp
 // installed, while working fine in Expo Go (which has its own, broader
 // manifest and isn't affected). Only takes effect in a native
 // prebuild/EAS build, not in Expo Go itself.

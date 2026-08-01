@@ -60,6 +60,7 @@ export async function createJob(overrides: {
   jobTypeId: string;
   businessId?: string;
   status?: string;
+  pickupAddress?: string;
   pickedUpAt?: Date;
   deliveredAt?: Date;
 }) {
@@ -70,6 +71,7 @@ export async function createJob(overrides: {
       driverId: overrides.driverId,
       businessId: overrides.businessId,
       status: overrides.status ?? "ASSIGNED",
+      pickupAddress: overrides.pickupAddress,
       pickedUpAt: overrides.pickedUpAt,
       deliveredAt: overrides.deliveredAt,
     },

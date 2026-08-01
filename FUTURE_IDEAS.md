@@ -8,9 +8,9 @@ built.
 ## Barcode / QR scanning for proof of delivery
 Use the phone camera (`expo-camera` + a barcode-scanning library, or the
 newer built-in `expo-camera` barcode scanning API) so a driver — or a
-customer — can scan a package barcode/QR code at pickup or drop-off. Would
+client — can scan a package barcode/QR code at pickup or drop-off. Would
 add a `scannedCode` field to `Job` and a scan screen in the driver app.
-Could later extend to a customer-facing scan-to-track page.
+Could later extend to a client-facing scan-to-track page.
 
 ## Automatic emailing of reports & invoices
 Right now hour reports and invoices are generated in-app and shared as a

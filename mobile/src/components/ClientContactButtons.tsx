@@ -13,7 +13,7 @@ function cleanPhoneForDialing(phone: string): string {
   return phone.replace(/[^\d+]/g, "");
 }
 
-export function CustomerContactButtons({ phone }: Props) {
+export function ClientContactButtons({ phone }: Props) {
   const cleaned = cleanPhoneForDialing(phone);
 
   async function call() {

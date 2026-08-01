@@ -20,7 +20,7 @@ const updateSchema = z.object({
   driverId: z.string().min(1).optional(),
   businessId: z.string().min(1).nullable().optional(),
   pickupAddress: z.string().trim().max(MAX_JOB_TEXT_LENGTH).optional(),
-  customerPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
+  clientPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   // When provided, replaces the job's whole set of delivery stops — capped
   // so a single edit can't force an unbounded JobStop bulk-insert.
   dropoffAddresses: z.array(z.string().trim().min(1).max(MAX_JOB_TEXT_LENGTH)).max(MAX_DROPOFF_STOPS).optional(),

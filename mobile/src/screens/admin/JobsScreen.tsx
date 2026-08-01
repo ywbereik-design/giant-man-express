@@ -36,7 +36,7 @@ export function AdminJobsScreen() {
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddresses, setDropoffAddresses] = useState<string[]>([""]);
-  const [customerPhone, setCustomerPhone] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -91,8 +91,8 @@ export function AdminJobsScreen() {
       setError("Title, job type, and driver are required");
       return;
     }
-    if (customerPhone.trim() && !isValidPhone(customerPhone.trim())) {
-      setError("Enter a valid customer phone number, or leave it blank");
+    if (clientPhone.trim() && !isValidPhone(clientPhone.trim())) {
+      setError("Enter a valid client phone number, or leave it blank");
       return;
     }
     setSaving(true);
@@ -104,7 +104,7 @@ export function AdminJobsScreen() {
         businessId: businessId ?? undefined,
         pickupAddress: pickupAddress.trim() || undefined,
         dropoffAddresses: dropoffAddresses.map((a) => a.trim()).filter(Boolean),
-        customerPhone: customerPhone.trim() || undefined,
+        clientPhone: clientPhone.trim() || undefined,
         notes: notes.trim() || undefined,
       });
       setTitle("");
@@ -113,7 +113,7 @@ export function AdminJobsScreen() {
       setBusinessId(null);
       setPickupAddress("");
       setDropoffAddresses([""]);
-      setCustomerPhone("");
+      setClientPhone("");
       setNotes("");
       await load();
     } catch (e) {
@@ -201,10 +201,10 @@ export function AdminJobsScreen() {
             ))}
             <Button title="+ Add Delivery Stop" variant="secondary" onPress={addDropoffField} />
 
-            <Label>Customer Phone (optional)</Label>
+            <Label>Client Phone (optional)</Label>
             <FieldInput
-              value={customerPhone}
-              onChangeText={setCustomerPhone}
+              value={clientPhone}
+              onChangeText={setClientPhone}
               placeholder="+1 555 555 5555"
               keyboardType="phone-pad"
             />
