@@ -3,10 +3,12 @@ import { Text, View } from "react-native";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { Button, Card, ErrorText, FieldInput, Label } from "./ui";
-import { colors, spacing } from "../theme/theme";
+import { spacing } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 export function ChangePinCard() {
   const { updateToken } = useAuth();
+  const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const [currentPin, setCurrentPin] = useState("");
   const [newPin, setNewPin] = useState("");

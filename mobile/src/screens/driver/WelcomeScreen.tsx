@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, Text, View, StyleSheet } from "react-native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../../auth/AuthContext";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import type { DriverStackParamList } from "../../navigation/DriverNavigator";
 import { DriverTabSegmentBar, DriverTabKey } from "../../navigation/DriverTabSegmentBar";
 
@@ -21,6 +22,8 @@ export function WelcomeScreen({
   navigation: NativeStackNavigationProp<DriverStackParamList, "Welcome">;
 }) {
   const { session } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   function goToTab(tab: DriverTabKey) {
     navigation.navigate("Main", { screen: tab });
@@ -51,7 +54,8 @@ export function WelcomeScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   topBar: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   greeting: { color: colors.text, fontSize: 22, fontWeight: "700", marginTop: spacing.md },
   name: { color: colors.text, fontSize: 16, marginTop: spacing.xs },
@@ -66,4 +70,5 @@ const styles = StyleSheet.create({
   },
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: "700" },
   cardSubtitle: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
-});
+  });
+}

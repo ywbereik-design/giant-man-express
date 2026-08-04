@@ -1,7 +1,7 @@
 import React from "react";
 import { Alert, Pressable, Text } from "react-native";
 import { useAuth } from "../auth/AuthContext";
-import { colors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 interface Props {
   // Extra reminder appended to the confirmation dialog — used in the driver
@@ -13,6 +13,7 @@ interface Props {
 
 export function LogoutButton({ warningMessage }: Props = {}) {
   const { logout } = useAuth();
+  const { colors } = useTheme();
 
   function confirmLogout() {
     const message = warningMessage

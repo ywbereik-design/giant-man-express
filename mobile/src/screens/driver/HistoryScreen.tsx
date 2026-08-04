@@ -4,7 +4,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { TimeEntry } from "../../api/types";
 import { Card, CenteredSpinner, ErrorText } from "../../components/ui";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 
 function hoursBetween(a: string, b: string | null): string {
@@ -32,6 +33,8 @@ function groupByDay(entries: TimeEntry[]): { title: string; data: TimeEntry[] }[
 }
 
 export function HistoryScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const tabBarHeight = useDriverTabBarHeight();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -84,7 +87,8 @@ export function HistoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   sectionHeader: {
     color: colors.textMuted,
     fontSize: 12,
@@ -97,4 +101,5 @@ const styles = StyleSheet.create({
   times: { color: colors.text, fontWeight: "700" },
   hours: { color: colors.primary, marginTop: spacing.xs, fontWeight: "600" },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
-});
+  });
+}

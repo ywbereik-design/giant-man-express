@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ScrollView, Text, View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -9,7 +9,8 @@ import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { SwipeToAccept } from "../../components/SwipeToAccept";
 import { submitJobStatus } from "../../lib/submitJobStatus";
 import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import type { DriverStackParamList } from "../../navigation/DriverNavigator";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "JobDetails">;
@@ -21,6 +22,8 @@ type Props = NativeStackScreenProps<DriverStackParamList, "JobDetails">;
 // see JobsScreen.tsx, which no longer renders an Accept button at all.
 export function JobDetailsScreen({ route, navigation }: Props) {
   const { job } = route.params;
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
   const reachedStages = STAGE_TIMESTAMPS.filter((s) => job[s.field]);
@@ -106,7 +109,8 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: spacing.xl },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
   title: { color: colors.text, fontSize: 20, fontWeight: "700", marginBottom: spacing.xs },
@@ -127,4 +131,5 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-});
+  });
+}

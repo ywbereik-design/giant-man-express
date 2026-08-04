@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import * as Location from "expo-location";
 import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing } from "../theme/theme";
+import { spacing, ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import { GOOGLE_MAPS_API_KEY, LatLng, geocodeAddress } from "../lib/googleMaps";
 
 const EDGE_PADDING = { top: 48, right: 48, bottom: 48, left: 48 };
@@ -28,6 +29,8 @@ interface Props {
 // plain-text fallback (not a blank/broken map) if no Google Maps API key is
 // configured, or if the address can't be geocoded.
 export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const mapRef = useRef<MapView>(null);
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
@@ -131,45 +134,47 @@ function toRegion(point: LatLng) {
   return { ...point, latitudeDelta: 0.05, longitudeDelta: 0.05 };
 }
 
-const styles = StyleSheet.create({
-  mapWrapper: {
-    height: 260,
-    borderRadius: 12,
-    overflow: "hidden",
-    marginTop: spacing.sm,
-  },
-  map: {
-    flex: 1,
-  },
-  driverMarker: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: colors.primaryText,
-  },
-  fallback: {
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  loading: {
-    alignItems: "center",
-  },
-  fallbackText: {
-    color: colors.textMuted,
-    fontSize: 13,
-  },
-  fallbackAddress: {
-    color: colors.text,
-    fontSize: 13,
-    marginTop: spacing.xs,
-    fontWeight: "600",
-  },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    mapWrapper: {
+      height: 260,
+      borderRadius: 12,
+      overflow: "hidden",
+      marginTop: spacing.sm,
+    },
+    map: {
+      flex: 1,
+    },
+    driverMarker: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: colors.primaryText,
+    },
+    fallback: {
+      marginTop: spacing.sm,
+      padding: spacing.md,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    loading: {
+      alignItems: "center",
+    },
+    fallbackText: {
+      color: colors.textMuted,
+      fontSize: 13,
+    },
+    fallbackAddress: {
+      color: colors.text,
+      fontSize: 13,
+      marginTop: spacing.xs,
+      fontWeight: "600",
+    },
+  });
+}

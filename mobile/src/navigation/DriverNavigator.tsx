@@ -15,7 +15,7 @@ import type { Job } from "../api/types";
 import { DriverTopTabBar } from "./DriverTopTabBar";
 import { DriverTabBarHeightContext } from "./DriverTabBarHeightContext";
 import { LogoutButton } from "./LogoutButton";
-import { colors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 export type DriverTabParamList = {
   Home: undefined;
@@ -124,6 +124,7 @@ function DriverTabs() {
 // tab bar) is pushed on top of it, so the hardware/back gesture from any
 // tab returns here rather than exiting or re-triggering auth.
 export function DriverNavigator() {
+  const { colors } = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{

@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Job } from "../../api/types";
 import { Badge, Card, CenteredSpinner, ErrorText, SectionTitle } from "../../components/ui";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 import { DriverRouteMap } from "../../components/DriverRouteMap";
 import { routeDestination } from "../../lib/routeDestination";
@@ -15,6 +16,8 @@ const ACTIVE_STATUSES: Job["status"][] = ["ACCEPTED", "ARRIVED", "PICKED_UP", "O
 // inline on the Jobs tab, but as its own destination so a driver can check
 // their route/ETA without scrolling through the full job list.
 export function LocationScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const tabBarHeight = useDriverTabBarHeight();
   const [job, setJob] = useState<Job | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -91,9 +94,11 @@ export function LocationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },
   title: { color: colors.text, fontSize: 17, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, marginTop: spacing.sm },
-});
+  });
+}

@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Pressable, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing } from "../theme/theme";
+import { spacing, ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 export type DriverTabKey = "Home" | "Jobs" | "Location" | "History";
 
@@ -23,6 +24,8 @@ export function DriverTabSegmentBar({
   activeTab: DriverTabKey | null;
   onSelect: (tab: DriverTabKey) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.segmentGroup}>
       {TABS.map((tab) => {
@@ -45,7 +48,8 @@ export function DriverTabSegmentBar({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   segmentGroup: {
     flexDirection: "row",
     backgroundColor: colors.surfaceAlt,
@@ -68,4 +72,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-});
+  });
+}

@@ -6,7 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../../api/client";
 import { FailureReason, Job, JobStatus } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 import { DriverRouteMap } from "../../components/DriverRouteMap";
 import { routeDestination } from "../../lib/routeDestination";
@@ -112,6 +113,8 @@ const JobCard = memo(function JobCard({
   onMarkFailed,
   onViewDetails,
 }: JobCardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const action = NEXT_ACTION[item.status];
   const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
   const destination = routeDestination(item);
@@ -198,6 +201,8 @@ const JobCard = memo(function JobCard({
 });
 
 export function DriverJobsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const tabBarHeight = useDriverTabBarHeight();
   // Jobs lives inside the bottom-tab navigator (Main), so JobDetails — a
   // sibling of Main, not nested inside it — is reached via the parent
@@ -510,7 +515,8 @@ export function DriverJobsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   checkbox: { padding: 2 },
@@ -532,4 +538,5 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   batchHint: { color: colors.textMuted, fontSize: 13, textAlign: "center" },
-});
+  });
+}

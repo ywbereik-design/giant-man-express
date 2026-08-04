@@ -1,8 +1,9 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Animated, LayoutChangeEvent, Text, View, StyleSheet } from "react-native";
 import { PanGestureHandler, PanGestureHandlerGestureEvent, PanGestureHandlerStateChangeEvent, State } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing } from "../theme/theme";
+import { spacing, ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 interface Props {
   label: string;
@@ -31,6 +32,8 @@ const COMPLETE_THRESHOLD = 0.85;
 // the older callback-based PanGestureHandler API integrates directly with
 // a plain core-RN Animated.Value.
 export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [trackWidth, setTrackWidth] = useState(0);
   const [busy, setBusy] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -97,7 +100,8 @@ export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: P
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   track: {
     height: THUMB_SIZE,
     borderRadius: THUMB_SIZE / 2,
@@ -127,4 +131,5 @@ const styles = StyleSheet.create({
   thumbDisabled: {
     opacity: 0.7,
   },
-});
+  });
+}

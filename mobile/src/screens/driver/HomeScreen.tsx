@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View, StyleSheet, RefreshControl, ScrollView, AppState } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -6,7 +6,8 @@ import { TimeEntry } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { ChangePinCard } from "../../components/ChangePinCard";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { isShiftTrackingActive, startShiftTracking, stopShiftTracking } from "../../location/shiftTracking";
 import { captureSelfie } from "../../lib/captureSelfie";
 import { getCoords } from "../../lib/getCoords";
@@ -19,6 +20,8 @@ interface StatusResponse {
 
 export function HomeScreen() {
   const { session } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const tabBarHeight = useDriverTabBarHeight();
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -195,7 +198,8 @@ export function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   greeting: { color: colors.text, fontSize: 22, fontWeight: "700", marginBottom: spacing.md },
   statusRow: { flexDirection: "row", alignItems: "center", marginBottom: spacing.sm },
   dot: { width: 10, height: 10, borderRadius: 5, marginRight: spacing.sm },
@@ -203,4 +207,5 @@ const styles = StyleSheet.create({
   since: { color: colors.textMuted, marginBottom: spacing.md },
   notice: { color: colors.primary, marginBottom: spacing.md, fontSize: 13 },
   hint: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginTop: spacing.sm },
-});
+  });
+}
