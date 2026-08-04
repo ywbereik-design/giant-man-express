@@ -8,7 +8,6 @@ import { GET as getMe } from "@/app/api/auth/me/route";
 import { PATCH as changePassword } from "@/app/api/account/password/route";
 import { POST as createStaffRoute } from "@/app/api/staff/route";
 import { POST as createDriverRoute } from "@/app/api/drivers/route";
-import { GET as notClockedIn } from "@/app/api/drivers/not-clocked-in/route";
 import { POST as createJobType } from "@/app/api/job-types/route";
 import { POST as createJobRoute } from "@/app/api/jobs/route";
 import { createStaff, createBusiness as createBusinessFixture, tokenFor, jsonRequest, getRequest } from "./helpers";
@@ -101,12 +100,6 @@ describe("ACCOUNTANT role — denied access outside its finance scope", () => {
     const res = await createDriverRoute(
       jsonRequest("/api/drivers", "POST", { name: "New Driver", employeeCode: `ACC-${Date.now()}`, pin: "1234" }, token)
     );
-    expect(res.status).toBe(403);
-  });
-
-  it("cannot view the not-clocked-in dashboard alert", async () => {
-    const { token } = await accountantToken();
-    const res = await notClockedIn(getRequest("/api/drivers/not-clocked-in", token));
     expect(res.status).toBe(403);
   });
 

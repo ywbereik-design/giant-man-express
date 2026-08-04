@@ -173,12 +173,6 @@ export interface StaffAccount {
   createdAt: string;
 }
 
-export interface NotClockedInDriver {
-  id: string;
-  name: string;
-  employeeCode: string;
-}
-
 export interface HoursByBusinessRow {
   businessId: string;
   businessName: string;
