@@ -1,11 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, HoursByBusinessRow } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { presetRanges, formatRange, DateRange } from "../../lib/dateRange";
 
 // Live, read-only view of hours worked per client — a billing *reference*
@@ -13,6 +14,8 @@ import { presetRanges, formatRange, DateRange } from "../../lib/dateRange";
 // generated/numbered document like Hours Reports or Invoices, so there's no
 // "generate"/PDF step here, just a picker + a query.
 export function HoursByBusinessScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [businessId, setBusinessId] = useState<string | null>(null);
@@ -118,7 +121,8 @@ export function HoursByBusinessScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   hint: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
   business: { color: colors.primary, fontWeight: "800", fontSize: 16 },
   meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
@@ -126,4 +130,5 @@ const styles = StyleSheet.create({
   hours: { color: colors.text, fontWeight: "600" },
   jobCount: { color: colors.textMuted, fontWeight: "600" },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
-});
+  });
+}

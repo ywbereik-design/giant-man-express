@@ -1,13 +1,16 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver, DriverLocationDetail } from "../../api/types";
 import { Badge, Card, CenteredSpinner, ErrorText, SectionTitle } from "../../components/ui";
 import { DriverLiveMap } from "../../components/DriverLiveMap";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 export function LocationReportsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +113,8 @@ export function LocationReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   hint: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   name: { color: colors.text, fontSize: 16, fontWeight: "700" },
@@ -126,4 +130,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
   },
-});
+  });
+}

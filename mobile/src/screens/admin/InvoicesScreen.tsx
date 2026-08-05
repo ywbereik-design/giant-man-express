@@ -1,17 +1,20 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business, Invoice } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { presetRanges, formatRange, DateRange } from "../../lib/dateRange";
 import { downloadAndSharePdf } from "../../lib/downloadAndShare";
 import { useAuth } from "../../auth/AuthContext";
 
 export function InvoicesScreen() {
   const { session } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -128,10 +131,12 @@ export function InvoicesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   number: { color: colors.primary, fontWeight: "800", fontSize: 16 },
   meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
   amount: { color: colors.text, marginTop: spacing.xs, fontWeight: "700", fontSize: 16 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
   hint: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.md },
-});
+  });
+}

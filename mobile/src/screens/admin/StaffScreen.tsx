@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -7,7 +7,8 @@ import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { isValidEmail } from "../../lib/validation";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 const ROLE_OPTIONS: { id: StaffRole; label: string }[] = [
   { id: "ADMIN", label: "Admin" },
@@ -20,6 +21,8 @@ const ROLE_TONE: Record<StaffRole, "info" | "muted"> = { ADMIN: "info", DISPATCH
 
 export function StaffScreen() {
   const { session } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [staff, setStaff] = useState<StaffAccount[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -239,9 +242,11 @@ export function StaffScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   name: { color: colors.text, fontSize: 16, fontWeight: "700" },
   meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
-});
+  });
+}

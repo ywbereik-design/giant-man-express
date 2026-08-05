@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, Text, View, StyleSheet } from "react-native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../../auth/AuthContext";
 import { ChangePasswordCard } from "../../components/ChangePasswordCard";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import type { DispatchStackParamList } from "../../navigation/DispatchNavigator";
 
 type MenuItem = { key: keyof DispatchStackParamList; title: string; subtitle: string };
@@ -21,6 +22,8 @@ export function DispatchDashboardScreen({
   navigation: NativeStackNavigationProp<DispatchStackParamList, "Dashboard">;
 }) {
   const { session } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.md }}>
@@ -44,7 +47,8 @@ export function DispatchDashboardScreen({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   greeting: { color: colors.text, fontSize: 22, fontWeight: "700" },
   company: { color: colors.textMuted, marginBottom: spacing.xs },
   roleNote: { color: colors.info, fontSize: 12, marginBottom: spacing.lg },
@@ -72,4 +76,5 @@ const styles = StyleSheet.create({
   },
   itemTitle: { color: colors.text, fontSize: 16, fontWeight: "700" },
   itemSubtitle: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
-});
+  });
+}

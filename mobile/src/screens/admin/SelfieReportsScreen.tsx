@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -6,9 +6,12 @@ import { Driver, TimeEntry } from "../../api/types";
 import { Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 export function SelfieReportsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string | null>(null);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
@@ -108,7 +111,8 @@ export function SelfieReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   hint: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   date: { color: colors.text, fontSize: 15, fontWeight: "700" },
@@ -117,4 +121,5 @@ const styles = StyleSheet.create({
   thumbnail: { width: 56, height: 56, borderRadius: 8, backgroundColor: colors.surfaceAlt },
   thumbnailEmpty: { alignItems: "center", justifyContent: "center" },
   thumbnailEmptyText: { color: colors.textMuted, fontSize: 11 },
-});
+  });
+}

@@ -1,17 +1,20 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver, HoursReport } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 import { presetRanges, formatRange, DateRange } from "../../lib/dateRange";
 import { downloadAndSharePdf } from "../../lib/downloadAndShare";
 import { useAuth } from "../../auth/AuthContext";
 
 export function ReportsScreen() {
   const { session } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [reports, setReports] = useState<HoursReport[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -129,11 +132,13 @@ export function ReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   number: { color: colors.primary, fontWeight: "800", fontSize: 16 },
   meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
   statsRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.xs },
   hours: { color: colors.text, fontWeight: "600" },
   distance: { color: colors.textMuted, fontWeight: "600" },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
-});
+  });
+}
