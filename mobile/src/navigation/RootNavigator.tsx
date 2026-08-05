@@ -7,23 +7,24 @@ import { DriverNavigator } from "./DriverNavigator";
 import { AdminNavigator } from "./AdminNavigator";
 import { DispatchNavigator } from "./DispatchNavigator";
 import { AccountantNavigator } from "./AccountantNavigator";
-import { colors } from "../theme/theme";
-
-const navTheme = {
-  ...DefaultTheme,
-  dark: true,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.background,
-    card: colors.surface,
-    text: colors.text,
-    border: colors.border,
-    primary: colors.primary,
-  },
-};
+import { useTheme } from "../theme/ThemeContext";
 
 export function RootNavigator() {
   const { session, loading } = useAuth();
+  const { colors, mode } = useTheme();
+
+  const navTheme = {
+    ...DefaultTheme,
+    dark: mode === "dark",
+    colors: {
+      ...DefaultTheme.colors,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      primary: colors.primary,
+    },
+  };
 
   if (loading) {
     return (

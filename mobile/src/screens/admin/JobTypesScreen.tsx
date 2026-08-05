@@ -1,12 +1,15 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { JobType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 export function JobTypesScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [name, setName] = useState("");
@@ -102,8 +105,10 @@ export function JobTypesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   name: { color: colors.text, fontSize: 16, fontWeight: "700" },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
-});
+  });
+}

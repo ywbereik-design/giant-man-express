@@ -88,7 +88,10 @@ export function Button({ title, variant = "primary", loading, disabled, ...rest 
   const styles = useStyles();
   const bg =
     variant === "primary" ? colors.primary : variant === "danger" ? colors.danger : colors.surfaceAlt;
-  const textColor = variant === "primary" ? colors.primaryText : colors.text;
+  // Danger buttons always get white text regardless of theme — colors.text
+  // flips to near-black in light mode, and near-black-on-red reads muddy
+  // and fails contrast; white stays legible against `danger` in both modes.
+  const textColor = variant === "primary" ? colors.primaryText : variant === "danger" ? "#FFFFFF" : colors.text;
   return (
     <Pressable
       disabled={disabled || loading}
@@ -116,8 +119,11 @@ export function ErrorText({ children }: { children: string | null }) {
 export function Badge({ text, tone = "info" }: { text: string; tone?: "info" | "success" | "danger" | "muted" }) {
   const { colors } = useTheme();
   const styles = useStyles();
+  // "muted" uses a dedicated mutedBadgeBg, not `border` — border is a
+  // near-background near-white in light mode, which made this badge's
+  // (always-white) text effectively invisible there.
   const bg =
-    tone === "success" ? colors.success : tone === "danger" ? colors.danger : tone === "muted" ? colors.border : colors.info;
+    tone === "success" ? colors.success : tone === "danger" ? colors.danger : tone === "muted" ? colors.mutedBadgeBg : colors.info;
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
       <Text style={styles.badgeText}>{text}</Text>

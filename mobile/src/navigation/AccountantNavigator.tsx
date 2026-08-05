@@ -6,7 +6,8 @@ import { ReportsScreen } from "../screens/admin/ReportsScreen";
 import { HoursByBusinessScreen } from "../screens/admin/HoursByBusinessScreen";
 import { BusinessesScreen } from "../screens/admin/BusinessesScreen";
 import { LogoutButton } from "./LogoutButton";
-import { colors } from "../theme/theme";
+import { ThemeToggleButton } from "./ThemeToggleButton";
+import { useTheme } from "../theme/ThemeContext";
 
 export type AccountantStackParamList = {
   Dashboard: undefined;
@@ -22,13 +23,19 @@ const Stack = createNativeStackNavigator<AccountantStackParamList>();
 // than duplicating them — both roles need the identical invoices/reports/
 // businesses UI, just reached from a different, narrower menu.
 export function AccountantNavigator() {
+  const { colors } = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.text,
         contentStyle: { backgroundColor: colors.background },
-        headerRight: () => <LogoutButton />,
+        headerRight: () => (
+          <>
+            <ThemeToggleButton />
+            <LogoutButton />
+          </>
+        ),
       }}
     >
       <Stack.Screen name="Dashboard" component={AccountantDashboardScreen} options={{ title: "Giant Man Express" }} />

@@ -1,6 +1,7 @@
-import React, { memo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, spacing } from "../theme/theme";
+import { spacing, ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 interface Props {
   uri: string;
@@ -19,6 +20,8 @@ interface Props {
 // once a job's photos are set, so there's no reason to re-decode on every
 // unrelated re-render of its parent.
 export const PhotoThumbnail = memo(function PhotoThumbnail({ uri, size = 56, caption }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [viewing, setViewing] = useState(false);
 
   return (
@@ -51,7 +54,8 @@ export const PhotoThumbnail = memo(function PhotoThumbnail({ uri, size = 56, cap
   );
 });
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   thumbnail: { borderRadius: 8, backgroundColor: colors.surfaceAlt },
   viewerBackdrop: {
     flex: 1,
@@ -69,4 +73,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   captionText: { color: colors.text, fontSize: 12, textAlign: "center" },
-});
+  });
+}

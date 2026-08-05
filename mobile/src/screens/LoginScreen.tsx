@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View, StyleSheet, Pressable } from "react-native";
 import { useAuth } from "../auth/AuthContext";
 import { Button, ErrorText, FieldInput, Label, Screen } from "../components/ui";
-import { colors, spacing } from "../theme/theme";
+import { spacing, ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import { ApiError } from "../api/client";
 import { isValidEmail } from "../lib/validation";
 
@@ -17,6 +18,8 @@ const MODES: { id: Mode; label: string; subtitle: string }[] = [
 
 export function LoginScreen() {
   const { loginAsStaff, loginAsDriver } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [mode, setMode] = useState<Mode>("DRIVER");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -141,7 +144,8 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   brand: { alignItems: "center", marginTop: spacing.xl, marginBottom: spacing.xl },
   title: { color: colors.primary, fontSize: 26, fontWeight: "800" },
   subtitle: { color: colors.textMuted, fontSize: 14, marginTop: 4 },
@@ -157,4 +161,5 @@ const styles = StyleSheet.create({
   toggleText: { color: colors.textMuted, fontWeight: "600" },
   toggleTextActive: { color: colors.primaryText },
   modeSubtitle: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginBottom: spacing.lg },
-});
+  });
+}

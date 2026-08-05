@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -6,7 +6,8 @@ import { Driver } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 const JOB_STATUS_LABEL: Record<string, string> = {
   ASSIGNED: "Assigned",
@@ -18,6 +19,8 @@ const JOB_STATUS_LABEL: Record<string, string> = {
 
 export function DriversScreen() {
   const { session } = useAuth();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const canManage = session?.role === "ADMIN";
 
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -252,11 +255,13 @@ export function DriversScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   name: { color: colors.text, fontSize: 16, fontWeight: "700" },
   meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
   jobRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
   photoRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
-});
+  });
+}

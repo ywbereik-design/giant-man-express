@@ -6,7 +6,8 @@ import { AdminJobsScreen } from "../screens/admin/JobsScreen";
 import { SelfieReportsScreen } from "../screens/admin/SelfieReportsScreen";
 import { LocationReportsScreen } from "../screens/admin/LocationReportsScreen";
 import { LogoutButton } from "./LogoutButton";
-import { colors } from "../theme/theme";
+import { ThemeToggleButton } from "./ThemeToggleButton";
+import { useTheme } from "../theme/ThemeContext";
 
 export type DispatchStackParamList = {
   Dashboard: undefined;
@@ -19,13 +20,19 @@ export type DispatchStackParamList = {
 const Stack = createNativeStackNavigator<DispatchStackParamList>();
 
 export function DispatchNavigator() {
+  const { colors } = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.text,
         contentStyle: { backgroundColor: colors.background },
-        headerRight: () => <LogoutButton />,
+        headerRight: () => (
+          <>
+            <ThemeToggleButton />
+            <LogoutButton />
+          </>
+        ),
       }}
     >
       <Stack.Screen name="Dashboard" component={DispatchDashboardScreen} options={{ title: "Giant Man Express" }} />

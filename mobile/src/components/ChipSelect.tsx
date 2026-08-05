@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, Text, StyleSheet } from "react-native";
-import { colors, spacing } from "../theme/theme";
+import { spacing, ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 
 export interface ChipOption {
   id: string;
@@ -16,6 +17,8 @@ export function ChipSelect({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
       {options.map((opt) => {
@@ -34,7 +37,8 @@ export function ChipSelect({
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
@@ -47,4 +51,5 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { color: colors.textMuted, fontWeight: "600" },
   chipTextSelected: { color: colors.primaryText },
-});
+  });
+}

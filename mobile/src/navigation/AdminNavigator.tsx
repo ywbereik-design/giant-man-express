@@ -12,7 +12,8 @@ import { SelfieReportsScreen } from "../screens/admin/SelfieReportsScreen";
 import { InvoicesScreen } from "../screens/admin/InvoicesScreen";
 import { StaffScreen } from "../screens/admin/StaffScreen";
 import { LogoutButton } from "./LogoutButton";
-import { colors } from "../theme/theme";
+import { ThemeToggleButton } from "./ThemeToggleButton";
+import { useTheme } from "../theme/ThemeContext";
 
 export type AdminStackParamList = {
   Dashboard: undefined;
@@ -31,13 +32,19 @@ export type AdminStackParamList = {
 const Stack = createNativeStackNavigator<AdminStackParamList>();
 
 export function AdminNavigator() {
+  const { colors } = useTheme();
   return (
     <Stack.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.text,
         contentStyle: { backgroundColor: colors.background },
-        headerRight: () => <LogoutButton />,
+        headerRight: () => (
+          <>
+            <ThemeToggleButton />
+            <LogoutButton />
+          </>
+        ),
       }}
     >
       <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: "Giant Man Express" }} />

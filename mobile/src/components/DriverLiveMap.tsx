@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../api/client";
 import { Job, DriverLocationDetail } from "../api/types";
-import { colors, spacing } from "../theme/theme";
+import { spacing, ThemeColors } from "../theme/theme";
+import { useTheme } from "../theme/ThemeContext";
 import { GOOGLE_MAPS_API_KEY, LatLng, geocodeAddress } from "../lib/googleMaps";
 import { routeDestination } from "../lib/routeDestination";
 
@@ -25,6 +26,8 @@ interface Props {
 // and their current active job, then draws the same live route + Google
 // Directions/traffic-aware ETA between the two.
 export function DriverLiveMap({ driverId }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const mapRef = useRef<MapView>(null);
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
@@ -174,7 +177,8 @@ function toRegion(point: LatLng) {
   return { ...point, latitudeDelta: 0.05, longitudeDelta: 0.05 };
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   mapWrapper: {
     position: "relative",
     height: 280,
@@ -233,4 +237,5 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 13,
   },
-});
+  });
+}

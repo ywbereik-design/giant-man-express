@@ -1,11 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { isValidEmail } from "../../lib/validation";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 function parseRate(raw: string): { rate?: number; error?: string } {
   if (!raw.trim()) return {};
@@ -15,6 +16,8 @@ function parseRate(raw: string): { rate?: number; error?: string } {
 }
 
 export function BusinessesScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [name, setName] = useState("");
@@ -202,8 +205,10 @@ export function BusinessesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   name: { color: colors.text, fontSize: 16, fontWeight: "700" },
   meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
-});
+  });
+}

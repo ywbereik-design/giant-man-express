@@ -9,7 +9,8 @@ import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { AddressRow } from "../../components/AddressRow";
 import { STATUS_TONE, STAGE_TIMESTAMPS, photoCaption } from "../../lib/jobStatus";
 import { isValidPhone } from "../../lib/validation";
-import { colors, spacing } from "../../theme/theme";
+import { spacing, ThemeColors } from "../../theme/theme";
+import { useTheme } from "../../theme/ThemeContext";
 
 const FILTERS = [
   { id: "ACTIVE", label: "Active" },
@@ -23,6 +24,8 @@ type FilterId = (typeof FILTERS)[number]["id"];
 const ACTIVE_STATUSES: Job["status"][] = ["ASSIGNED", "ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY"];
 
 export function AdminJobsScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [driverOptions, setDriverOptions] = useState<Driver[]>([]);
@@ -297,7 +300,8 @@ export function AdminJobsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },
   title: { color: colors.text, fontSize: 16, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
@@ -311,4 +315,5 @@ const styles = StyleSheet.create({
   photoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginBottom: 4 },
   divider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.lg, marginBottom: spacing.md },
   stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
-});
+  });
+}

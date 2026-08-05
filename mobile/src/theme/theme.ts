@@ -16,11 +16,20 @@ export const darkColors = {
   danger: "#e5484d",
   success: "#3fb950",
   info: "#4a9eff",
+  // Fill behind a "muted"-tone Badge (see ui.tsx) — kept distinct from
+  // `border` even though it's the same value here, because light mode
+  // needs a genuinely different (much darker) fill for its white badge
+  // text to stay legible; `border` itself stays a plain divider color.
+  mutedBadgeBg: "#333333",
 };
 
 // Light mode — deliberately not using solid red as `primary`, so a primary
 // action button is never visually confusable with an error/cancellation
 // (which still uses `danger`, a distinct red, only for that purpose).
+// Every value below was picked (and checked against WCAG contrast ratios)
+// to read cleanly against `background`/`surface`, not just to look right —
+// `textMuted` and `success` in particular were lightened/darkened from an
+// earlier pass that technically passed but only barely (~4.5:1).
 export const lightColors = {
   background: "#F8F9FA",
   surface: "#FFFFFF",
@@ -29,10 +38,18 @@ export const lightColors = {
   primary: "#1E293B",
   primaryText: "#FFFFFF",
   text: "#0F172A",
-  textMuted: "#64748B",
+  // Slate-600, not slate-500 — ~7.5:1 against background/surface instead of
+  // a borderline ~4.5:1, so secondary/hint text stays comfortably readable.
+  textMuted: "#475569",
   danger: "#DC2626",
-  success: "#16A34A",
+  // Green-700, not green-600 — plain green-600 (#16A34A) only hits ~3.3:1
+  // with the white text Badge always uses, well under the 4.5:1 AA minimum.
+  success: "#15803D",
   info: "#2563EB",
+  // A "muted" Badge previously filled with `border` (#E2E8F0, near-white)
+  // behind hardcoded white text — effectively invisible. This is a
+  // distinct, deliberately dark fill so that pairing stays legible.
+  mutedBadgeBg: "#475569",
 };
 
 export type ThemeColors = typeof darkColors;

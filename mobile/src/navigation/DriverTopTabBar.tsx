@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { LogoutButton } from "./LogoutButton";
+import { ThemeToggleButton } from "./ThemeToggleButton";
 import { DriverTabSegmentBar, DriverTabKey } from "./DriverTabSegmentBar";
 import { spacing, ThemeColors } from "../theme/theme";
 import { useTheme } from "../theme/ThemeContext";
@@ -24,7 +25,7 @@ export function DriverTopTabBar({
   onLayout,
 }: BottomTabBarProps & { onLayout?: (e: LayoutChangeEvent) => void }) {
   const insets = useSafeAreaInsets();
-  const { colors, mode, toggle } = useTheme();
+  const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
@@ -39,14 +40,7 @@ export function DriverTopTabBar({
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Giant Man Express</Text>
-        <Pressable
-          onPress={toggle}
-          hitSlop={12}
-          style={styles.themeToggle}
-          accessibilityLabel={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          <Ionicons name={mode === "dark" ? "moon" : "sunny"} size={20} color={colors.text} />
-        </Pressable>
+        <ThemeToggleButton />
         <LogoutButton warningMessage="If you're still clocked in, this won't end your shift — clock out first if you're done for the day." />
       </View>
       <DriverTabSegmentBar
@@ -94,9 +88,6 @@ function makeStyles(colors: ThemeColors) {
       color: colors.text,
       fontSize: 17,
       fontWeight: "700",
-    },
-    themeToggle: {
-      padding: 2,
     },
   });
 }
