@@ -7,10 +7,10 @@ import { GET as getBusiness, PATCH as updateBusiness } from "@/app/api/businesse
 import { GET as getMe } from "@/app/api/auth/me/route";
 import { PATCH as changePassword } from "@/app/api/account/password/route";
 import { POST as createStaffRoute } from "@/app/api/staff/route";
-import { POST as createDriverRoute } from "@/app/api/drivers/route";
+import { GET as listDrivers, POST as createDriverRoute } from "@/app/api/drivers/route";
 import { POST as createJobType } from "@/app/api/job-types/route";
 import { POST as createJobRoute } from "@/app/api/jobs/route";
-import { createStaff, createBusiness as createBusinessFixture, tokenFor, jsonRequest, getRequest } from "./helpers";
+import { createStaff, createBusiness as createBusinessFixture, createDriver, tokenFor, jsonRequest, getRequest } from "./helpers";
 
 const PERIOD = { periodStart: "2026-01-01T00:00:00.000Z", periodEnd: "2026-02-01T00:00:00.000Z" };
 
@@ -68,6 +68,23 @@ describe("ACCOUNTANT role — granted access", () => {
       { params: { id: business.id } }
     );
     expect(updated.status).toBe(200);
+  });
+
+  it("can list drivers for the report picker, but only name/code — not operational detail", async () => {
+    const { token } = await accountantToken();
+    const { driver } = await createDriver();
+
+    const res = await listDrivers(getRequest("/api/drivers", token));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const found = body.drivers.find((d: { id: string }) => d.id === driver.id);
+    expect(found).toMatchObject({ id: driver.id, name: driver.name, employeeCode: driver.employeeCode, active: true });
+    // Live location, clock-in selfie, and current job are operational data
+    // outside the Accountant's invoices/reports/billing scope — the ADMIN/
+    // DISPATCH branch of this same route returns them, this one must not.
+    expect(found).not.toHaveProperty("clockInPhoto");
+    expect(found).not.toHaveProperty("currentLat");
+    expect(found).not.toHaveProperty("clockedIn");
   });
 
   it("has a working session check and can change its own password", async () => {

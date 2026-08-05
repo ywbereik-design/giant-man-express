@@ -5,6 +5,7 @@ import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
+import { AddressAutocompleteInput } from "../../components/AddressAutocompleteInput";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { AddressRow } from "../../components/AddressRow";
 import { STATUS_TONE, STAGE_TIMESTAMPS, photoCaption } from "../../lib/jobStatus";
@@ -86,6 +87,23 @@ export function AdminJobsScreen() {
 
   function removeDropoffField(index: number) {
     setDropoffAddresses((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : [""]));
+  }
+
+  // Picking a business fills in its stored address as the pickup address —
+  // most jobs are picked up from the client's own premises, so this saves
+  // re-typing an address dispatch already has on file. Only fills an empty
+  // field, so it never clobbers an address the dispatcher already typed
+  // (e.g. a different pickup point than the client's listed address).
+  function selectBusiness(id: string) {
+    if (id === businessId) {
+      setBusinessId(null);
+      return;
+    }
+    setBusinessId(id);
+    const business = businessOptions.find((b) => b.id === id);
+    if (business?.address && !pickupAddress.trim()) {
+      setPickupAddress(business.address);
+    }
   }
 
   async function createJob() {
@@ -179,17 +197,17 @@ export function AdminJobsScreen() {
             <ChipSelect
               options={businessOptions.map((b) => ({ id: b.id, label: b.name }))}
               selectedId={businessId}
-              onSelect={(id) => setBusinessId(id === businessId ? null : id)}
+              onSelect={selectBusiness}
             />
 
             <Label>Pickup Address (optional)</Label>
-            <FieldInput value={pickupAddress} onChangeText={setPickupAddress} placeholder="123 Depot Rd" />
+            <AddressAutocompleteInput value={pickupAddress} onChangeText={setPickupAddress} placeholder="123 Depot Rd" />
 
             <Label>Delivery Stops (optional)</Label>
             {dropoffAddresses.map((address, index) => (
               <View key={index} style={styles.stopRow}>
                 <View style={{ flex: 1 }}>
-                  <FieldInput
+                  <AddressAutocompleteInput
                     value={address}
                     onChangeText={(v) => updateDropoffAt(index, v)}
                     placeholder={dropoffAddresses.length > 1 ? `Stop ${index + 1} — 456 Client Ave` : "456 Client Ave"}

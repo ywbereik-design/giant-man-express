@@ -10,9 +10,21 @@ import { SHIFT_PHOTO_EXPIRY_MS } from "@/lib/constants";
 export async function GET(req: NextRequest) {
   // Dispatch gets read-only access here — they need the driver list to
   // assign jobs and monitor who's currently working, but can't manage
-  // driver accounts (that stays ADMIN-only, see POST/PATCH below).
-  const auth = await requireRole(req, ["ADMIN", "DISPATCH"]);
+  // driver accounts (that stays ADMIN-only, see POST/PATCH below). Accountant
+  // also gets read-only access, but only to the name/code list needed for the
+  // driver picker on Hours Reports / Hours by Business — not the live
+  // location, clock-in selfie, or active-job detail below, which is
+  // operational data outside their invoices/reports/billing scope.
+  const auth = await requireRole(req, ["ADMIN", "DISPATCH", "ACCOUNTANT"]);
   if ("error" in auth) return auth.error;
+
+  if (auth.session.role === "ACCOUNTANT") {
+    const drivers = await prisma.driver.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, employeeCode: true, active: true },
+    });
+    return Response.json({ drivers });
+  }
 
   const dayStart = startOfTodayUTC();
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);

@@ -32,3 +32,34 @@ export async function geocodeAddress(address: string): Promise<LatLng | null> {
     return null;
   }
 }
+
+export interface AddressSuggestion {
+  placeId: string;
+  description: string;
+}
+
+// Live address suggestions as dispatch types a pickup/dropoff address —
+// same "call Google directly from the device" pattern as geocodeAddress
+// above. Requires the Places API to be enabled on this key in Google Cloud
+// Console (separate from Maps SDK / Geocoding / Directions). Returns []
+// rather than throwing on any failure (no key, network error, no matches)
+// so a slow/broken connection never blocks typing a plain address by hand —
+// the field this feeds always still works as an ordinary text input.
+export async function fetchAddressSuggestions(query: string): Promise<AddressSuggestion[]> {
+  if (!GOOGLE_MAPS_API_KEY || query.trim().length < 3) return [];
+
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+      query
+    )}&key=${GOOGLE_MAPS_API_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data?.status !== "OK" || !Array.isArray(data.predictions)) return [];
+    return data.predictions.map((p: { place_id: string; description: string }) => ({
+      placeId: p.place_id,
+      description: p.description,
+    }));
+  } catch {
+    return [];
+  }
+}
