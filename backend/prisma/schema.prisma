@@ -69,6 +69,10 @@ model Business {
   name         String
   contactName  String?
   contactEmail String?
+  // The client's own contact number — used to auto-fill a job's Client
+  // Phone field when dispatch picks this business (see /api/jobs and the
+  // Jobs screen), same as address auto-fills Pickup Address.
+  phone        String?
   address      String?
   billingRate  Float? // $ per hour, optional
   createdAt    DateTime @default(now())

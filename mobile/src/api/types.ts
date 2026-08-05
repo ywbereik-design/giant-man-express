@@ -75,6 +75,7 @@ export interface Business {
   // that response shape.
   contactName?: string | null;
   contactEmail?: string | null;
+  phone?: string | null;
   address?: string | null;
   billingRate?: number | null;
 }

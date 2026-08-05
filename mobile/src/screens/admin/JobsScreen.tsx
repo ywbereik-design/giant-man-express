@@ -89,11 +89,12 @@ export function AdminJobsScreen() {
     setDropoffAddresses((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : [""]));
   }
 
-  // Picking a business fills in its stored address as the pickup address —
-  // most jobs are picked up from the client's own premises, so this saves
-  // re-typing an address dispatch already has on file. Only fills an empty
-  // field, so it never clobbers an address the dispatcher already typed
-  // (e.g. a different pickup point than the client's listed address).
+  // Picking a business fills in its stored address and phone — most jobs
+  // are picked up from the client's own premises and their contact number
+  // is who the driver should reach at the address, so this saves
+  // re-typing details dispatch already has on file. Only fills an empty
+  // field, so it never clobbers something the dispatcher already typed
+  // (e.g. a different pickup point/contact than the client's own).
   function selectBusiness(id: string) {
     if (id === businessId) {
       setBusinessId(null);
@@ -103,6 +104,9 @@ export function AdminJobsScreen() {
     const business = businessOptions.find((b) => b.id === id);
     if (business?.address && !pickupAddress.trim()) {
       setPickupAddress(business.address);
+    }
+    if (business?.phone && !clientPhone.trim()) {
+      setClientPhone(business.phone);
     }
   }
 

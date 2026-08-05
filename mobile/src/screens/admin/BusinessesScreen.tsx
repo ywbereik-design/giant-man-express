@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
-import { isValidEmail } from "../../lib/validation";
+import { isValidEmail, isValidPhone } from "../../lib/validation";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
@@ -23,6 +23,7 @@ export function BusinessesScreen() {
   const [name, setName] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [billingRate, setBillingRate] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export function BusinessesScreen() {
   const [editName, setEditName] = useState("");
   const [editContactName, setEditContactName] = useState("");
   const [editContactEmail, setEditContactEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editBillingRate, setEditBillingRate] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
@@ -64,6 +66,10 @@ export function BusinessesScreen() {
       setError("Enter a valid contact email address");
       return;
     }
+    if (phone.trim() && !isValidPhone(phone.trim())) {
+      setError("Enter a valid phone number, or leave it blank");
+      return;
+    }
     const { rate, error: rateError } = parseRate(billingRate);
     if (rateError) {
       setError(rateError);
@@ -75,12 +81,14 @@ export function BusinessesScreen() {
         name: name.trim(),
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
+        phone: phone.trim() || undefined,
         address: address.trim() || undefined,
         billingRate: rate,
       });
       setName("");
       setContactName("");
       setContactEmail("");
+      setPhone("");
       setAddress("");
       setBillingRate("");
       await load();
@@ -96,6 +104,7 @@ export function BusinessesScreen() {
     setEditName(business.name);
     setEditContactName(business.contactName ?? "");
     setEditContactEmail(business.contactEmail ?? "");
+    setEditPhone(business.phone ?? "");
     setEditAddress(business.address ?? "");
     setEditBillingRate(business.billingRate ? String(business.billingRate) : "");
     setEditError(null);
@@ -115,6 +124,10 @@ export function BusinessesScreen() {
       setEditError("Enter a valid contact email address");
       return;
     }
+    if (editPhone.trim() && !isValidPhone(editPhone.trim())) {
+      setEditError("Enter a valid phone number, or leave it blank");
+      return;
+    }
     const { rate, error: rateError } = parseRate(editBillingRate);
     if (rateError) {
       setEditError(rateError);
@@ -126,6 +139,7 @@ export function BusinessesScreen() {
         name: editName.trim(),
         contactName: editContactName.trim() || undefined,
         contactEmail: editContactEmail.trim() || undefined,
+        phone: editPhone.trim() || undefined,
         address: editAddress.trim() || undefined,
         billingRate: rate,
       });
@@ -156,6 +170,8 @@ export function BusinessesScreen() {
             <FieldInput value={contactName} onChangeText={setContactName} placeholder="Jane Doe" />
             <Label>Contact Email (optional)</Label>
             <FieldInput value={contactEmail} onChangeText={setContactEmail} autoCapitalize="none" keyboardType="email-address" placeholder="ap@business.ca" />
+            <Label>Phone (optional)</Label>
+            <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />
             <Label>Address (optional)</Label>
             <FieldInput value={address} onChangeText={setAddress} placeholder="100 Main St, Ottawa" />
             <Label>Billing Rate per Job ($, optional)</Label>
@@ -177,6 +193,8 @@ export function BusinessesScreen() {
               <FieldInput value={editContactName} onChangeText={setEditContactName} />
               <Label>Contact Email (optional)</Label>
               <FieldInput value={editContactEmail} onChangeText={setEditContactEmail} autoCapitalize="none" keyboardType="email-address" />
+              <Label>Phone (optional)</Label>
+              <FieldInput value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" />
               <Label>Address (optional)</Label>
               <FieldInput value={editAddress} onChangeText={setEditAddress} />
               <Label>Billing Rate per Job ($, optional)</Label>
@@ -191,6 +209,7 @@ export function BusinessesScreen() {
           <Card>
             <Text style={styles.name}>{item.name}</Text>
             {item.contactEmail && <Text style={styles.meta}>{item.contactEmail}</Text>}
+            {item.phone && <Text style={styles.meta}>{item.phone}</Text>}
             {item.address && <Text style={styles.meta}>{item.address}</Text>}
             <Text style={styles.meta}>
               Rate: {item.billingRate ? `$${item.billingRate.toFixed(2)} / job` : "not set"}

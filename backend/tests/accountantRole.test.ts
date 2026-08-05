@@ -60,14 +60,18 @@ describe("ACCOUNTANT role — granted access", () => {
     const single = await getBusiness(getRequest(`/api/businesses/${business.id}`, token), { params: { id: business.id } });
     expect(single.status).toBe(200);
 
-    const created = await createBusiness(jsonRequest("/api/businesses", "POST", { name: "New Client", billingRate: 50 }, token));
+    const created = await createBusiness(
+      jsonRequest("/api/businesses", "POST", { name: "New Client", billingRate: 50, phone: "613-555-0199" }, token)
+    );
     expect(created.status).toBe(201);
+    expect((await created.json()).business.phone).toBe("613-555-0199");
 
     const updated = await updateBusiness(
-      jsonRequest(`/api/businesses/${business.id}`, "PATCH", { billingRate: 99 }, token),
+      jsonRequest(`/api/businesses/${business.id}`, "PATCH", { billingRate: 99, phone: "613-555-0100" }, token),
       { params: { id: business.id } }
     );
     expect(updated.status).toBe(200);
+    expect((await updated.json()).business.phone).toBe("613-555-0100");
   });
 
   it("can list drivers for the report picker, but only name/code — not operational detail", async () => {
