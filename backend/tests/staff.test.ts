@@ -125,6 +125,30 @@ describe("PATCH /api/staff/[id]", () => {
     });
     expect(res2.status).toBe(400);
   });
+
+  it("only lets one of two concurrent demotions of different admins succeed, when exactly 2 active admins exist", async () => {
+    // Without the advisory-lock serialization, each request independently
+    // reads "1 other active admin remains" before either commits, and both
+    // succeed — leaving zero active admins with no self-service recovery.
+    const { staff: admin1 } = await createStaff({ role: "ADMIN" });
+    const { staff: admin2 } = await createStaff({ role: "ADMIN" });
+    await deactivateAllOtherAdmins(admin1.id, admin2.id);
+    const token = await tokenFor(admin1.id, "ADMIN", admin1.name);
+
+    const [r1, r2] = await Promise.all([
+      updateStaff(jsonRequest(`/api/staff/${admin1.id}`, "PATCH", { role: "DISPATCH" }, token), {
+        params: { id: admin1.id },
+      }),
+      updateStaff(jsonRequest(`/api/staff/${admin2.id}`, "PATCH", { role: "DISPATCH" }, token), {
+        params: { id: admin2.id },
+      }),
+    ]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([200, 400]);
+
+    const remainingActiveAdmins = await prisma.staffUser.count({ where: { role: "ADMIN", active: true } });
+    expect(remainingActiveAdmins).toBe(1);
+  });
 });
 
 describe("DELETE /api/staff/[id]", () => {

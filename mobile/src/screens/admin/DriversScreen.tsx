@@ -1,11 +1,12 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, Text, View, StyleSheet } from "react-native";
+import React, { memo, useCallback, useMemo, useState } from "react";
+import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
+import { isValidPhone } from "../../lib/validation";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
@@ -16,6 +17,133 @@ const JOB_STATUS_LABEL: Record<string, string> = {
   PICKED_UP: "Picked Up",
   ON_THE_WAY: "On the Way",
 };
+
+// Memoized so typing in the "Add Driver" form above the list (a separate
+// piece of state in the parent) doesn't re-render every existing driver
+// card on every keystroke — an inline renderItem closure did that
+// regardless of which state changed. Edit-mode fields are normalized to
+// constant values for rows that aren't being edited (see renderItem below)
+// so memo's shallow prop compare still bails out for them even while a
+// different row's edit form is being typed into.
+const DriverRow = memo(function DriverRow({
+  item,
+  canManage,
+  isEditing,
+  isToggling,
+  editName,
+  editPhone,
+  editPin,
+  editError,
+  editSaving,
+  onEditNameChange,
+  onEditPhoneChange,
+  onEditPinChange,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onToggleActive,
+}: {
+  item: Driver;
+  canManage: boolean;
+  isEditing: boolean;
+  isToggling: boolean;
+  editName: string;
+  editPhone: string;
+  editPin: string;
+  editError: string | null;
+  editSaving: boolean;
+  onEditNameChange: (v: string) => void;
+  onEditPhoneChange: (v: string) => void;
+  onEditPinChange: (v: string) => void;
+  onStartEdit: (driver: Driver) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (driver: Driver) => void;
+  onToggleActive: (driver: Driver) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  if (canManage && isEditing) {
+    return (
+      <Card>
+        <Label>Full Name</Label>
+        <FieldInput value={editName} onChangeText={onEditNameChange} />
+        <Label>Phone (optional)</Label>
+        <FieldInput value={editPhone} onChangeText={onEditPhoneChange} keyboardType="phone-pad" />
+        <Label>Reset PIN (optional — leave blank to keep current)</Label>
+        <FieldInput value={editPin} onChangeText={onEditPinChange} keyboardType="number-pad" secureTextEntry placeholder="New 4+ digit PIN" />
+        <ErrorText>{editError}</ErrorText>
+        <Button title="Save Changes" onPress={() => onSaveEdit(item)} loading={editSaving} />
+        <Button title="Cancel" variant="secondary" onPress={onCancelEdit} />
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{item.name}</Text>
+          <Text style={styles.meta}>
+            Code: {item.employeeCode}
+            {item.phone ? ` · ${item.phone}` : ""}
+          </Text>
+        </View>
+        <View style={{ alignItems: "flex-end", gap: spacing.xs }}>
+          <Badge text={item.active ? "Active" : "Inactive"} tone={item.active ? "success" : "muted"} />
+          {item.active && (
+            <Badge text={item.clockedIn ? "Clocked In" : "Clocked Out"} tone={item.clockedIn ? "success" : "muted"} />
+          )}
+        </View>
+      </View>
+      {item.active && item.currentJobStatus && (
+        <View style={styles.jobRow}>
+          <Badge
+            text={JOB_STATUS_LABEL[item.currentJobStatus] ?? item.currentJobStatus}
+            tone={item.currentJobStatus === "ASSIGNED" ? "muted" : "info"}
+          />
+          <Text style={styles.meta} numberOfLines={1}>
+            {item.currentJobTitle}
+          </Text>
+        </View>
+      )}
+      {item.active && ((item.todayDistanceKm ?? 0) > 0 || item.clockedIn) && (
+        <Text style={styles.meta}>
+          Today: {(item.todayDistanceKm ?? 0).toFixed(1)} km
+          {item.clockedIn && item.currentLocationAt
+            ? ` · last seen ${new Date(item.currentLocationAt).toLocaleTimeString("en-CA")}`
+            : item.clockedIn
+              ? " · waiting for first location ping"
+              : ""}
+        </Text>
+      )}
+      {item.clockedIn && item.clockInPhoto && (
+        <View style={styles.photoRow}>
+          <PhotoThumbnail uri={item.clockInPhoto} size={44} />
+          <Text style={styles.meta}>Clocked in {item.clockInAt ? new Date(item.clockInAt).toLocaleTimeString("en-CA") : ""}</Text>
+        </View>
+      )}
+      {item.clockedIn && !item.clockInPhoto && item.clockInPhotoExpired && (
+        <Text style={styles.meta}>Shift photo expired (clocked in over 12h ago)</Text>
+      )}
+      {canManage && (
+        <View style={{ marginTop: spacing.sm, flexDirection: "row", gap: spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <Button title="Edit" variant="secondary" onPress={() => onStartEdit(item)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button
+              title={item.active ? "Deactivate" : "Reactivate"}
+              variant={item.active ? "danger" : "secondary"}
+              onPress={() => onToggleActive(item)}
+              loading={isToggling}
+            />
+          </View>
+        </View>
+      )}
+    </Card>
+  );
+});
 
 export function DriversScreen() {
   const { session } = useAuth();
@@ -67,6 +195,10 @@ export function DriversScreen() {
       setError("PIN must be 4-8 digits, numbers only");
       return;
     }
+    if (phone.trim() && !isValidPhone(phone.trim())) {
+      setError("Enter a valid phone number");
+      return;
+    }
     setSaving(true);
     try {
       await api.post("/api/drivers", {
@@ -87,55 +219,106 @@ export function DriversScreen() {
     }
   }
 
-  async function toggleActive(driver: Driver) {
-    setTogglingId(driver.id);
-    try {
-      await api.patch(`/api/drivers/${driver.id}`, { active: !driver.active });
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not update driver");
-    } finally {
-      setTogglingId(null);
-    }
-  }
+  const toggleActive = useCallback(
+    async (driver: Driver) => {
+      setTogglingId(driver.id);
+      try {
+        await api.patch(`/api/drivers/${driver.id}`, { active: !driver.active });
+        await load();
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Could not update driver");
+      } finally {
+        setTogglingId(null);
+      }
+    },
+    [load]
+  );
 
-  function startEdit(driver: Driver) {
+  // Only the deactivating direction needs a confirmation — reactivating just
+  // restores access and isn't destructive.
+  const confirmToggleActive = useCallback(
+    (driver: Driver) => {
+      if (!driver.active) {
+        toggleActive(driver);
+        return;
+      }
+      Alert.alert("Deactivate this driver?", `${driver.name} will no longer be assignable to jobs.`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Deactivate", style: "destructive", onPress: () => toggleActive(driver) },
+      ]);
+    },
+    [toggleActive]
+  );
+
+  const startEdit = useCallback((driver: Driver) => {
     setEditingId(driver.id);
     setEditName(driver.name);
     setEditPhone(driver.phone ?? "");
     setEditPin("");
     setEditError(null);
-  }
+  }, []);
 
-  function cancelEdit() {
-    setEditingId(null);
-  }
+  const cancelEdit = useCallback(() => setEditingId(null), []);
 
-  async function saveEdit(driver: Driver) {
-    setEditError(null);
-    if (!editName.trim()) {
-      setEditError("Name is required");
-      return;
-    }
-    if (editPin && (editPin.trim().length < 4 || editPin.trim().length > 8 || !/^\d+$/.test(editPin.trim()))) {
-      setEditError("New PIN must be 4-8 digits, numbers only (or leave blank to keep the current PIN)");
-      return;
-    }
-    setEditSaving(true);
-    try {
-      await api.patch(`/api/drivers/${driver.id}`, {
-        name: editName.trim(),
-        phone: editPhone.trim() || undefined,
-        ...(editPin.trim() ? { pin: editPin.trim() } : {}),
-      });
-      setEditingId(null);
-      await load();
-    } catch (e) {
-      setEditError(e instanceof ApiError ? e.message : "Could not save changes");
-    } finally {
-      setEditSaving(false);
-    }
-  }
+  const saveEdit = useCallback(
+    async (driver: Driver) => {
+      setEditError(null);
+      if (!editName.trim()) {
+        setEditError("Name is required");
+        return;
+      }
+      if (editPin && (editPin.trim().length < 4 || editPin.trim().length > 8 || !/^\d+$/.test(editPin.trim()))) {
+        setEditError("New PIN must be 4-8 digits, numbers only (or leave blank to keep the current PIN)");
+        return;
+      }
+      if (editPhone.trim() && !isValidPhone(editPhone.trim())) {
+        setEditError("Enter a valid phone number");
+        return;
+      }
+      setEditSaving(true);
+      try {
+        await api.patch(`/api/drivers/${driver.id}`, {
+          name: editName.trim(),
+          phone: editPhone.trim() || undefined,
+          ...(editPin.trim() ? { pin: editPin.trim() } : {}),
+        });
+        setEditingId(null);
+        await load();
+      } catch (e) {
+        setEditError(e instanceof ApiError ? e.message : "Could not save changes");
+      } finally {
+        setEditSaving(false);
+      }
+    },
+    [editName, editPhone, editPin, load]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Driver }) => {
+      const isEditing = canManage && editingId === item.id;
+      return (
+        <DriverRow
+          item={item}
+          canManage={canManage}
+          isEditing={isEditing}
+          isToggling={togglingId === item.id}
+          editName={isEditing ? editName : ""}
+          editPhone={isEditing ? editPhone : ""}
+          editPin={isEditing ? editPin : ""}
+          editError={isEditing ? editError : null}
+          editSaving={isEditing ? editSaving : false}
+          onEditNameChange={setEditName}
+          onEditPhoneChange={setEditPhone}
+          onEditPinChange={setEditPin}
+          onStartEdit={startEdit}
+          onCancelEdit={cancelEdit}
+          onSaveEdit={saveEdit}
+          onToggleActive={confirmToggleActive}
+        />
+      );
+    },
+    [canManage, editingId, togglingId, editName, editPhone, editPin, editError, editSaving, startEdit, cancelEdit, saveEdit, confirmToggleActive]
+  );
 
   if (initialLoading) return <CenteredSpinner />;
 
@@ -168,89 +351,7 @@ export function DriversScreen() {
         )
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No drivers yet.</Text> : null}
-      renderItem={({ item }) => {
-        if (canManage && editingId === item.id) {
-          return (
-            <Card>
-              <Label>Full Name</Label>
-              <FieldInput value={editName} onChangeText={setEditName} />
-              <Label>Phone (optional)</Label>
-              <FieldInput value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" />
-              <Label>Reset PIN (optional — leave blank to keep current)</Label>
-              <FieldInput value={editPin} onChangeText={setEditPin} keyboardType="number-pad" secureTextEntry placeholder="New 4+ digit PIN" />
-              <ErrorText>{editError}</ErrorText>
-              <Button title="Save Changes" onPress={() => saveEdit(item)} loading={editSaving} />
-              <Button title="Cancel" variant="secondary" onPress={cancelEdit} />
-            </Card>
-          );
-        }
-        return (
-          <Card>
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.meta}>
-                  Code: {item.employeeCode}
-                  {item.phone ? ` · ${item.phone}` : ""}
-                </Text>
-              </View>
-              <View style={{ alignItems: "flex-end", gap: spacing.xs }}>
-                <Badge text={item.active ? "Active" : "Inactive"} tone={item.active ? "success" : "muted"} />
-                {item.active && (
-                  <Badge text={item.clockedIn ? "Clocked In" : "Clocked Out"} tone={item.clockedIn ? "success" : "muted"} />
-                )}
-              </View>
-            </View>
-            {item.active && item.currentJobStatus && (
-              <View style={styles.jobRow}>
-                <Badge
-                  text={JOB_STATUS_LABEL[item.currentJobStatus] ?? item.currentJobStatus}
-                  tone={item.currentJobStatus === "ASSIGNED" ? "muted" : "info"}
-                />
-                <Text style={styles.meta} numberOfLines={1}>
-                  {item.currentJobTitle}
-                </Text>
-              </View>
-            )}
-            {item.active && ((item.todayDistanceKm ?? 0) > 0 || item.clockedIn) && (
-              <Text style={styles.meta}>
-                Today: {(item.todayDistanceKm ?? 0).toFixed(1)} km
-                {item.clockedIn && item.currentLocationAt
-                  ? ` · last seen ${new Date(item.currentLocationAt).toLocaleTimeString("en-CA")}`
-                  : item.clockedIn
-                    ? " · waiting for first location ping"
-                    : ""}
-              </Text>
-            )}
-            {item.clockedIn && item.clockInPhoto && (
-              <View style={styles.photoRow}>
-                <PhotoThumbnail uri={item.clockInPhoto} size={44} />
-                <Text style={styles.meta}>
-                  Clocked in {item.clockInAt ? new Date(item.clockInAt).toLocaleTimeString("en-CA") : ""}
-                </Text>
-              </View>
-            )}
-            {item.clockedIn && !item.clockInPhoto && item.clockInPhotoExpired && (
-              <Text style={styles.meta}>Shift photo expired (clocked in over 12h ago)</Text>
-            )}
-            {canManage && (
-              <View style={{ marginTop: spacing.sm, flexDirection: "row", gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Button title="Edit" variant="secondary" onPress={() => startEdit(item)} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    title={item.active ? "Deactivate" : "Reactivate"}
-                    variant={item.active ? "danger" : "secondary"}
-                    onPress={() => toggleActive(item)}
-                    loading={togglingId === item.id}
-                  />
-                </View>
-              </View>
-            )}
-          </Card>
-        );
-      }}
+      renderItem={renderItem}
     />
   );
 }

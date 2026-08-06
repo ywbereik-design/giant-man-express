@@ -4,10 +4,11 @@ import { prisma } from "@/lib/db";
 import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
+import { PHONE_PATTERN } from "@/lib/constants";
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
-  phone: z.string().trim().optional(),
+  phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   active: z.boolean().optional(),
   pin: z
     .string()

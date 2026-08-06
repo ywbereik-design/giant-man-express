@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole, hashSecret, verifySecret, signSession, Role } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
-import { isRateLimited, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
+import { consumeAttempt, clearAttempts } from "@/lib/rateLimit";
 
 // Self-service password change for the currently logged-in Admin or Dispatch
 // account — distinct from /api/staff/[id], which lets an ADMIN reset any
@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest) {
   const { currentPassword, newPassword } = body.data;
   const key = `account-password:${auth.session.sub}`;
 
-  if (await isRateLimited(key)) {
+  if (await consumeAttempt(key)) {
     return Response.json(
       { error: "Too many failed attempts. Try again in a few minutes." },
       { status: 429 }
@@ -31,7 +31,6 @@ export async function PATCH(req: NextRequest) {
 
   const staff = await prisma.staffUser.findUnique({ where: { id: auth.session.sub } });
   if (!staff || !(await verifySecret(currentPassword, staff.passwordHash))) {
-    await recordFailedAttempt(key);
     // 400, not 401: the caller's session/token is perfectly valid — only the
     // *current password* they supplied for confirmation was wrong. A 401
     // here would make the app's client treat this like an expired session

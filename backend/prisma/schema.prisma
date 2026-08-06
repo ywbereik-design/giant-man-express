@@ -74,7 +74,7 @@ model Business {
   // Jobs screen), same as address auto-fills Pickup Address.
   phone        String?
   address      String?
-  billingRate  Float? // $ per hour, optional
+  billingRate  Float? // flat $ charged per delivered job on this business's invoices, optional
   createdAt    DateTime @default(now())
 
   jobs     Job[]

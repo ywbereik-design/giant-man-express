@@ -1,11 +1,42 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, Text, View, StyleSheet } from "react-native";
+import React, { memo, useCallback, useMemo, useState } from "react";
+import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { JobType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
+
+// Memoized so typing in the "Add Job Type" form above the list doesn't
+// re-render every existing job type card on every keystroke.
+const JobTypeRow = memo(function JobTypeRow({
+  item,
+  isToggling,
+  onToggleActive,
+}: {
+  item: JobType;
+  isToggling: boolean;
+  onToggleActive: (jt: JobType) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Card>
+      <View style={styles.row}>
+        <Text style={styles.name}>{item.name}</Text>
+        <Badge text={item.active ? "Active" : "Inactive"} tone={item.active ? "success" : "muted"} />
+      </View>
+      <View style={{ marginTop: spacing.sm }}>
+        <Button
+          title={item.active ? "Deactivate" : "Reactivate"}
+          variant={item.active ? "danger" : "secondary"}
+          onPress={() => onToggleActive(item)}
+          loading={isToggling}
+        />
+      </View>
+    </Card>
+  );
+});
 
 export function JobTypesScreen() {
   const { colors } = useTheme();
@@ -52,17 +83,41 @@ export function JobTypesScreen() {
     }
   }
 
-  async function toggleActive(jt: JobType) {
-    setTogglingId(jt.id);
-    try {
-      await api.patch(`/api/job-types/${jt.id}`, { active: !jt.active });
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not update job type");
-    } finally {
-      setTogglingId(null);
-    }
-  }
+  const toggleActive = useCallback(
+    async (jt: JobType) => {
+      setTogglingId(jt.id);
+      try {
+        await api.patch(`/api/job-types/${jt.id}`, { active: !jt.active });
+        await load();
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Could not update job type");
+      } finally {
+        setTogglingId(null);
+      }
+    },
+    [load]
+  );
+
+  // Only the deactivating direction needs a confirmation — reactivating just
+  // makes it selectable again and isn't destructive.
+  const confirmToggleActive = useCallback(
+    (jt: JobType) => {
+      if (!jt.active) {
+        toggleActive(jt);
+        return;
+      }
+      Alert.alert("Deactivate this job type?", `"${jt.name}" will no longer be selectable for new jobs.`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Deactivate", style: "destructive", onPress: () => toggleActive(jt) },
+      ]);
+    },
+    [toggleActive]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: JobType }) => <JobTypeRow item={item} isToggling={togglingId === item.id} onToggleActive={confirmToggleActive} />,
+    [togglingId, confirmToggleActive]
+  );
 
   if (initialLoading) return <CenteredSpinner />;
 
@@ -85,22 +140,7 @@ export function JobTypesScreen() {
         </View>
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No job types yet.</Text> : null}
-      renderItem={({ item }) => (
-        <Card>
-          <View style={styles.row}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Badge text={item.active ? "Active" : "Inactive"} tone={item.active ? "success" : "muted"} />
-          </View>
-          <View style={{ marginTop: spacing.sm }}>
-            <Button
-              title={item.active ? "Deactivate" : "Reactivate"}
-              variant="secondary"
-              onPress={() => toggleActive(item)}
-              loading={togglingId === item.id}
-            />
-          </View>
-        </Card>
-      )}
+      renderItem={renderItem}
     />
   );
 }

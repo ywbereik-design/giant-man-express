@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -18,6 +18,101 @@ const ROLE_OPTIONS: { id: StaffRole; label: string }[] = [
 
 const ROLE_LABEL: Record<StaffRole, string> = { ADMIN: "Admin", DISPATCH: "Dispatch", ACCOUNTANT: "Accountant" };
 const ROLE_TONE: Record<StaffRole, "info" | "muted"> = { ADMIN: "info", DISPATCH: "muted", ACCOUNTANT: "muted" };
+
+// Memoized so typing in the "Add Staff Account" form above the list doesn't
+// re-render every existing account card on every keystroke. Edit-mode
+// fields are normalized to constant values for rows not being edited (see
+// renderItem below) so memo's shallow prop compare still bails for them
+// while a different row's edit form is being typed into.
+const StaffRow = memo(function StaffRow({
+  item,
+  isSelf,
+  isEditing,
+  isBusy,
+  editRole,
+  editPassword,
+  editError,
+  editSaving,
+  onEditRoleChange,
+  onEditPasswordChange,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onToggleActive,
+  onDelete,
+}: {
+  item: StaffAccount;
+  isSelf: boolean;
+  isEditing: boolean;
+  isBusy: boolean;
+  editRole: StaffRole;
+  editPassword: string;
+  editError: string | null;
+  editSaving: boolean;
+  onEditRoleChange: (role: StaffRole) => void;
+  onEditPasswordChange: (v: string) => void;
+  onStartEdit: (member: StaffAccount) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (member: StaffAccount) => void;
+  onToggleActive: (member: StaffAccount) => void;
+  onDelete: (member: StaffAccount) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  if (isEditing) {
+    return (
+      <Card>
+        <Text style={styles.name}>{item.name}</Text>
+        <Text style={styles.meta}>{item.email}</Text>
+        <Label>Role</Label>
+        <ChipSelect options={ROLE_OPTIONS} selectedId={editRole} onSelect={(id) => onEditRoleChange(id as StaffRole)} />
+        <Label>Reset Password (optional — leave blank to keep current)</Label>
+        <FieldInput value={editPassword} onChangeText={onEditPasswordChange} secureTextEntry placeholder="New password" />
+        <ErrorText>{editError}</ErrorText>
+        <Button title="Save Changes" onPress={() => onSaveEdit(item)} loading={editSaving} />
+        <Button title="Cancel" variant="secondary" onPress={onCancelEdit} />
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>
+            {item.name}
+            {isSelf ? " (you)" : ""}
+          </Text>
+          <Text style={styles.meta}>{item.email}</Text>
+        </View>
+        <View style={{ alignItems: "flex-end", gap: spacing.xs }}>
+          <Badge text={ROLE_LABEL[item.role]} tone={ROLE_TONE[item.role]} />
+          <Badge text={item.active ? "Active" : "Inactive"} tone={item.active ? "success" : "muted"} />
+        </View>
+      </View>
+      <View style={{ marginTop: spacing.sm, flexDirection: "row", gap: spacing.sm }}>
+        <View style={{ flex: 1 }}>
+          <Button title="Edit" variant="secondary" onPress={() => onStartEdit(item)} />
+        </View>
+        {!isSelf && (
+          <View style={{ flex: 1 }}>
+            <Button
+              title={item.active ? "Deactivate" : "Reactivate"}
+              variant={item.active ? "danger" : "secondary"}
+              onPress={() => onToggleActive(item)}
+              loading={isBusy}
+            />
+          </View>
+        )}
+      </View>
+      {!isSelf && (
+        <View style={{ marginTop: spacing.sm }}>
+          <Button title="Delete Account" variant="danger" onPress={() => onDelete(item)} loading={isBusy} />
+        </View>
+      )}
+    </Card>
+  );
+});
 
 export function StaffScreen() {
   const { session } = useAuth();
@@ -86,74 +181,126 @@ export function StaffScreen() {
     }
   }
 
-  function startEdit(member: StaffAccount) {
+  const startEdit = useCallback((member: StaffAccount) => {
     setEditingId(member.id);
     setEditRole(member.role);
     setEditPassword("");
     setEditError(null);
-  }
+  }, []);
 
-  function cancelEdit() {
-    setEditingId(null);
-  }
+  const cancelEdit = useCallback(() => setEditingId(null), []);
 
-  async function saveEdit(member: StaffAccount) {
-    setEditError(null);
-    if (editPassword && editPassword.length < 8) {
-      setEditError("New password must be at least 8 characters (or leave blank to keep the current one)");
-      return;
-    }
-    setEditSaving(true);
-    try {
-      await api.patch(`/api/staff/${member.id}`, {
-        role: editRole,
-        ...(editPassword ? { password: editPassword } : {}),
-      });
-      setEditingId(null);
-      await load();
-    } catch (e) {
-      setEditError(e instanceof ApiError ? e.message : "Could not save changes");
-    } finally {
-      setEditSaving(false);
-    }
-  }
+  const saveEdit = useCallback(
+    async (member: StaffAccount) => {
+      setEditError(null);
+      if (editPassword && editPassword.length < 8) {
+        setEditError("New password must be at least 8 characters (or leave blank to keep the current one)");
+        return;
+      }
+      setEditSaving(true);
+      try {
+        await api.patch(`/api/staff/${member.id}`, {
+          role: editRole,
+          ...(editPassword ? { password: editPassword } : {}),
+        });
+        setEditingId(null);
+        await load();
+      } catch (e) {
+        setEditError(e instanceof ApiError ? e.message : "Could not save changes");
+      } finally {
+        setEditSaving(false);
+      }
+    },
+    [editRole, editPassword, load]
+  );
 
-  async function toggleActive(member: StaffAccount) {
-    setError(null);
-    setBusyId(member.id);
-    try {
-      await api.patch(`/api/staff/${member.id}`, { active: !member.active });
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not update account");
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const toggleActive = useCallback(
+    async (member: StaffAccount) => {
+      setError(null);
+      setBusyId(member.id);
+      try {
+        await api.patch(`/api/staff/${member.id}`, { active: !member.active });
+        await load();
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Could not update account");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [load]
+  );
 
-  function confirmDelete(member: StaffAccount) {
-    Alert.alert(
-      "Delete this account?",
-      `"${member.name}" (${member.email}) will be permanently deleted. This can't be undone.`,
-      [
+  // Only the deactivating direction needs a confirmation — reactivating just
+  // restores access and isn't destructive.
+  const confirmToggleActive = useCallback(
+    (member: StaffAccount) => {
+      if (!member.active) {
+        toggleActive(member);
+        return;
+      }
+      Alert.alert("Deactivate this account?", `"${member.name}" (${member.email}) will no longer be able to log in.`, [
         { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => deleteStaff(member) },
-      ]
-    );
-  }
+        { text: "Deactivate", style: "destructive", onPress: () => toggleActive(member) },
+      ]);
+    },
+    [toggleActive]
+  );
 
-  async function deleteStaff(member: StaffAccount) {
-    setError(null);
-    setBusyId(member.id);
-    try {
-      await api.delete(`/api/staff/${member.id}`);
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not delete account");
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const deleteStaff = useCallback(
+    async (member: StaffAccount) => {
+      setError(null);
+      setBusyId(member.id);
+      try {
+        await api.delete(`/api/staff/${member.id}`);
+        await load();
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Could not delete account");
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [load]
+  );
+
+  const confirmDelete = useCallback(
+    (member: StaffAccount) => {
+      Alert.alert(
+        "Delete this account?",
+        `"${member.name}" (${member.email}) will be permanently deleted. This can't be undone.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => deleteStaff(member) },
+        ]
+      );
+    },
+    [deleteStaff]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: StaffAccount }) => {
+      const isEditing = editingId === item.id;
+      return (
+        <StaffRow
+          item={item}
+          isSelf={item.id === session?.id}
+          isEditing={isEditing}
+          isBusy={busyId === item.id}
+          editRole={isEditing ? editRole : "DISPATCH"}
+          editPassword={isEditing ? editPassword : ""}
+          editError={isEditing ? editError : null}
+          editSaving={isEditing ? editSaving : false}
+          onEditRoleChange={setEditRole}
+          onEditPasswordChange={setEditPassword}
+          onStartEdit={startEdit}
+          onCancelEdit={cancelEdit}
+          onSaveEdit={saveEdit}
+          onToggleActive={confirmToggleActive}
+          onDelete={confirmDelete}
+        />
+      );
+    },
+    [session?.id, editingId, busyId, editRole, editPassword, editError, editSaving, startEdit, cancelEdit, saveEdit, confirmToggleActive, confirmDelete]
+  );
 
   if (initialLoading) return <CenteredSpinner />;
 
@@ -182,62 +329,7 @@ export function StaffScreen() {
         </View>
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No staff accounts yet.</Text> : null}
-      renderItem={({ item }) => {
-        const isSelf = item.id === session?.id;
-
-        if (editingId === item.id) {
-          return (
-            <Card>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.meta}>{item.email}</Text>
-              <Label>Role</Label>
-              <ChipSelect options={ROLE_OPTIONS} selectedId={editRole} onSelect={(id) => setEditRole(id as StaffRole)} />
-              <Label>Reset Password (optional — leave blank to keep current)</Label>
-              <FieldInput value={editPassword} onChangeText={setEditPassword} secureTextEntry placeholder="New password" />
-              <ErrorText>{editError}</ErrorText>
-              <Button title="Save Changes" onPress={() => saveEdit(item)} loading={editSaving} />
-              <Button title="Cancel" variant="secondary" onPress={cancelEdit} />
-            </Card>
-          );
-        }
-        return (
-          <Card>
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>
-                  {item.name}
-                  {isSelf ? " (you)" : ""}
-                </Text>
-                <Text style={styles.meta}>{item.email}</Text>
-              </View>
-              <View style={{ alignItems: "flex-end", gap: spacing.xs }}>
-                <Badge text={ROLE_LABEL[item.role]} tone={ROLE_TONE[item.role]} />
-                <Badge text={item.active ? "Active" : "Inactive"} tone={item.active ? "success" : "muted"} />
-              </View>
-            </View>
-            <View style={{ marginTop: spacing.sm, flexDirection: "row", gap: spacing.sm }}>
-              <View style={{ flex: 1 }}>
-                <Button title="Edit" variant="secondary" onPress={() => startEdit(item)} />
-              </View>
-              {!isSelf && (
-                <View style={{ flex: 1 }}>
-                  <Button
-                    title={item.active ? "Deactivate" : "Reactivate"}
-                    variant={item.active ? "danger" : "secondary"}
-                    onPress={() => toggleActive(item)}
-                    loading={busyId === item.id}
-                  />
-                </View>
-              )}
-            </View>
-            {!isSelf && (
-              <View style={{ marginTop: spacing.sm }}>
-                <Button title="Delete Account" variant="danger" onPress={() => confirmDelete(item)} loading={busyId === item.id} />
-              </View>
-            )}
-          </Card>
-        );
-      }}
+      renderItem={renderItem}
     />
   );
 }

@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
-import { Animated, LayoutChangeEvent, Text, View, StyleSheet } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, Animated, LayoutChangeEvent, Pressable, Text, View, StyleSheet } from "react-native";
 import { PanGestureHandler, PanGestureHandlerGestureEvent, PanGestureHandlerStateChangeEvent, State } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { spacing, ThemeColors } from "../theme/theme";
@@ -41,6 +41,24 @@ export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: P
   const maxTranslate = Math.max(trackWidth - THUMB_SIZE, 0);
   const interactive = !disabled && !busy && !completed;
 
+  // A custom pan gesture has no way to be performed by VoiceOver/TalkBack —
+  // there's no drag to intercept once a screen reader owns the touch
+  // stream. Without this, a screen-reader-dependent driver could not accept
+  // any job at all. When a screen reader is on, the whole track becomes a
+  // plain activatable button instead of a gesture surface.
+  const [screenReaderOn, setScreenReaderOn] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isScreenReaderEnabled().then((enabled) => {
+      if (mounted) setScreenReaderOn(enabled);
+    });
+    const sub = AccessibilityInfo.addEventListener("screenReaderChanged", (enabled) => setScreenReaderOn(enabled));
+    return () => {
+      mounted = false;
+      sub.remove();
+    };
+  }, []);
+
   // Deliberately plain functions, recreated on every render — NOT memoized
   // into a ref the way the original PanResponder instance was. That earlier
   // version froze maxTranslate at 0 (its value on the very first render,
@@ -52,6 +70,24 @@ export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: P
     if (!interactive) return;
     const next = Math.min(Math.max(event.nativeEvent.translationX, 0), maxTranslate);
     translateX.setValue(next);
+  }
+
+  // Shared by both the gesture-completion path and the accessibility
+  // activation path below — only the caller's onComplete/busy/completed
+  // bookkeeping, no gesture-specific animation.
+  async function runOnComplete() {
+    setBusy(true);
+    try {
+      await onComplete();
+      setCompleted(true);
+    } catch {
+      // The caller is responsible for surfacing *why* this failed (e.g.
+      // an error banner) — this component just resets the gesture so the
+      // driver can try again.
+      Animated.spring(translateX, { toValue: 0, useNativeDriver: false }).start();
+    } finally {
+      setBusy(false);
+    }
   }
 
   function handleStateChange(event: PanGestureHandlerStateChangeEvent) {
@@ -68,26 +104,51 @@ export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: P
       return;
     }
 
-    Animated.timing(translateX, { toValue: maxTranslate, duration: 120, useNativeDriver: false }).start(async () => {
-      setBusy(true);
-      try {
-        await onComplete();
-        setCompleted(true);
-      } catch {
-        // The caller is responsible for surfacing *why* this failed (e.g.
-        // an error banner) — this component just resets the gesture so the
-        // driver can try again.
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: false }).start();
-      } finally {
-        setBusy(false);
-      }
-    });
+    Animated.timing(translateX, { toValue: maxTranslate, duration: 120, useNativeDriver: false }).start(runOnComplete);
+  }
+
+  // Activated either by a screen reader's default double-tap (the whole
+  // track is a Pressable when screenReaderOn) or by the "activate"
+  // accessibility action exposed below regardless of screenReaderOn — some
+  // assistive tech (e.g. Switch Control) isn't detected by
+  // isScreenReaderEnabled but still can't perform an arbitrary pan gesture.
+  function handleAccessibilityActivate() {
+    if (!interactive) return;
+    translateX.setValue(maxTranslate);
+    runOnComplete();
+  }
+
+  const accessibilityLabel = completed ? completedLabel : label;
+  const accessibilityProps = {
+    accessible: true,
+    accessibilityRole: "button" as const,
+    accessibilityLabel,
+    accessibilityState: { disabled: !interactive, busy },
+    accessibilityActions: [{ name: "activate", label: accessibilityLabel }] as const,
+    onAccessibilityAction: (event: { nativeEvent: { actionName: string } }) => {
+      if (event.nativeEvent.actionName === "activate") handleAccessibilityActivate();
+    },
+  };
+
+  if (screenReaderOn) {
+    return (
+      <Pressable
+        style={styles.track}
+        onPress={handleAccessibilityActivate}
+        disabled={!interactive}
+        {...accessibilityProps}
+      >
+        <Text style={styles.label} numberOfLines={1}>
+          {accessibilityLabel}
+        </Text>
+      </Pressable>
+    );
   }
 
   return (
-    <View style={styles.track} onLayout={(e: LayoutChangeEvent) => setTrackWidth(e.nativeEvent.layout.width)}>
+    <View style={styles.track} onLayout={(e: LayoutChangeEvent) => setTrackWidth(e.nativeEvent.layout.width)} {...accessibilityProps}>
       <Text style={styles.label} numberOfLines={1}>
-        {completed ? completedLabel : label}
+        {accessibilityLabel}
       </Text>
       {!completed && (
         <PanGestureHandler onGestureEvent={handleGestureEvent} onHandlerStateChange={handleStateChange} enabled={interactive}>

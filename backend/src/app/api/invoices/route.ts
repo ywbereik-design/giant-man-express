@@ -83,25 +83,29 @@ export async function POST(req: NextRequest) {
   }));
   const totalAmount = lineItemsData.reduce((sum, li) => sum + li.amount, 0);
 
-  const invoiceNumber = await nextNumber("INV", "invoice");
-
   // The `invoiceLineItems: { none: {} }` filter above handles the common
   // sequential case; the @@unique([jobId]) constraint on InvoiceLineItem is
   // the backstop for two concurrent requests both reading the same
   // "un-invoiced" jobs before either commits — runOrRespond turns the
   // resulting P2002 into a clean 409 instead of an unhandled 500, and
-  // instead of silently double-billing one of these jobs.
+  // instead of silently double-billing one of these jobs. The number
+  // increment and the row insert share one transaction so a collision
+  // rolls both back together instead of burning an invoice number on a
+  // request that never produced an invoice.
   const result = await runOrRespond(() =>
-    prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        businessId,
-        periodStart: start,
-        periodEnd: end,
-        totalAmount,
-        lineItems: { create: lineItemsData },
-      },
-      include: { business: true, lineItems: true },
+    prisma.$transaction(async (tx) => {
+      const invoiceNumber = await nextNumber("INV", "invoice", tx);
+      return tx.invoice.create({
+        data: {
+          invoiceNumber,
+          businessId,
+          periodStart: start,
+          periodEnd: end,
+          totalAmount,
+          lineItems: { create: lineItemsData },
+        },
+        include: { business: true, lineItems: true },
+      });
     })
   );
   if (isResponse(result)) return result;

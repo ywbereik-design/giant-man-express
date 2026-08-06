@@ -9,29 +9,30 @@ import { prisma } from "@/lib/db";
 const MAX_ATTEMPTS = 8;
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
-export async function isRateLimited(key: string): Promise<boolean> {
-  const row = await prisma.rateLimitAttempt.findUnique({ where: { key } });
-  if (!row || row.resetAt <= new Date()) return false;
-  return row.count >= MAX_ATTEMPTS;
-}
-
-export async function recordFailedAttempt(key: string): Promise<void> {
+// Atomically increments this key's attempt count (resetting it first if the
+// previous window has expired) and returns the new count in the same round
+// trip via a single INSERT ... ON CONFLICT. This must be called and checked
+// BEFORE the password/PIN comparison, not after — the previous design read
+// the count, ran the slow bcrypt compare, and only recorded a failure
+// afterward, which let concurrent requests all read the same pre-increment
+// count before any of them wrote back. Verified live: 20 concurrent failed
+// logins against one account all got through under that design. Using
+// `$queryRaw` here (Prisma's parameterized tagged-template form, not string
+// concatenation — still fully injection-safe) because this specific
+// increment-with-conditional-reset can't be expressed as one atomic
+// round trip through the high-level query builder.
+export async function consumeAttempt(key: string): Promise<boolean> {
   const now = new Date();
-  const existing = await prisma.rateLimitAttempt.findUnique({ where: { key } });
-
-  if (!existing || existing.resetAt <= now) {
-    await prisma.rateLimitAttempt.upsert({
-      where: { key },
-      update: { count: 1, resetAt: new Date(now.getTime() + WINDOW_MS) },
-      create: { key, count: 1, resetAt: new Date(now.getTime() + WINDOW_MS) },
-    });
-    return;
-  }
-
-  await prisma.rateLimitAttempt.update({
-    where: { key },
-    data: { count: { increment: 1 } },
-  });
+  const resetAt = new Date(now.getTime() + WINDOW_MS);
+  const rows = await prisma.$queryRaw<{ count: number }[]>`
+    INSERT INTO "RateLimitAttempt" (key, count, "resetAt")
+    VALUES (${key}, 1, ${resetAt})
+    ON CONFLICT (key) DO UPDATE SET
+      count = CASE WHEN "RateLimitAttempt"."resetAt" <= ${now} THEN 1 ELSE "RateLimitAttempt".count + 1 END,
+      "resetAt" = CASE WHEN "RateLimitAttempt"."resetAt" <= ${now} THEN ${resetAt} ELSE "RateLimitAttempt"."resetAt" END
+    RETURNING count;
+  `;
+  return rows[0].count > MAX_ATTEMPTS;
 }
 
 export async function clearAttempts(key: string): Promise<void> {

@@ -129,5 +129,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   );
   if (isResponse(result)) return result;
 
-  return Response.json({ job: result });
+  // Invoice line items are permanent once created (see POST /api/invoices) —
+  // there's no void/credit mechanism, so correcting a job's status away from
+  // DELIVERED after it's already been billed would otherwise leave a stale
+  // charge with no indication anything changed. This doesn't block the
+  // correction (the admin may have a good reason, e.g. the job really was
+  // delivered and only the notes were wrong) — it just surfaces the fact so
+  // the correction doesn't silently diverge from what the client is billed.
+  let warning: string | undefined;
+  if (status && status !== "DELIVERED" && existing.status === "DELIVERED") {
+    const billed = await prisma.invoiceLineItem.findFirst({ where: { jobId: params.id } });
+    if (billed) {
+      warning = "This job was already billed on an invoice — changing its status does not update or void that charge.";
+    }
+  }
+
+  return Response.json({ job: result, ...(warning ? { warning } : {}) });
 }

@@ -1,5 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { ImageManipulator, SaveFormat, type ImageRef } from "expo-image-manipulator";
 
 export const TARGET_MAX_BYTES = 500 * 1024;
 
@@ -43,19 +43,31 @@ export async function capturePhoto(cameraType: ImagePicker.CameraType): Promise<
   if (result.canceled || !result.assets?.[0]) return null;
   const sourceUri = result.assets[0].uri;
 
-  // Re-manipulates from the original capture on every step (rather than
-  // chaining resizes on an already-compressed output) so each attempt is the
-  // best possible quality at that step's target size, not a resize-of-a-resize.
+  // Decoding + resizing the original capture (often 10+ megapixels) is the
+  // expensive part of each step; re-encoding an already-resized image at a
+  // different JPEG quality is comparatively cheap. COMPRESSION_STEPS repeats
+  // the same width across several quality levels before shrinking further,
+  // so resizing fresh from sourceUri on every step (as this used to do) redid
+  // that expensive decode+resize 2-3x for widths that hadn't changed — the
+  // main source of the multi-second delay drivers hit on Picked Up/Delivered.
+  // Rendering once per distinct width and calling saveAsync() again on that
+  // same ImageRef for each quality at that width cuts the resize count from
+  // up to 6 down to at most 3.
   let last: string | null = null;
-  for (const step of COMPRESSION_STEPS) {
-    const context = ImageManipulator.manipulate(sourceUri);
-    context.resize({ width: step.width });
-    const rendered = await context.renderAsync();
-    const saved = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: step.compress, base64: true });
+  let renderedWidth: number | null = null;
+  let rendered: ImageRef | null = null;
+  outer: for (const step of COMPRESSION_STEPS) {
+    if (renderedWidth !== step.width) {
+      const context = ImageManipulator.manipulate(sourceUri);
+      context.resize({ width: step.width });
+      rendered = await context.renderAsync();
+      renderedWidth = step.width;
+    }
+    const saved = await rendered!.saveAsync({ format: SaveFormat.JPEG, compress: step.compress, base64: true });
     if (!saved.base64) continue;
 
     last = saved.base64;
-    if (base64ByteSize(saved.base64) <= TARGET_MAX_BYTES) break;
+    if (base64ByteSize(saved.base64) <= TARGET_MAX_BYTES) break outer;
   }
 
   // A photo WAS taken (the cancel case already returned above) but every

@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import NetInfo from "@react-native-community/netinfo";
@@ -130,7 +130,14 @@ const JobCard = memo(function JobCard({
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
             {selectionMode && batchEligible && (
-              <Pressable onPress={() => onToggleSelect(item.id)} hitSlop={8} style={styles.checkbox}>
+              <Pressable
+                onPress={() => onToggleSelect(item.id)}
+                hitSlop={8}
+                style={styles.checkbox}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected }}
+                accessibilityLabel={`Select ${item.title} for batch update`}
+              >
                 <Ionicons
                   name={selected ? "checkbox" : "square-outline"}
                   size={20}
@@ -371,6 +378,23 @@ export function DriverJobsScreen() {
     []
   );
 
+  // Holds a just-captured photo/coords across a failed submit attempt so a
+  // retry doesn't force the driver back through the camera — capturePhoto()
+  // is slow enough on its own (a real photo, resized/compressed at up to 3
+  // quality steps) that discarding it on every transient submit error (a
+  // slow connection, a 409 from another device having already moved the
+  // job on) and forcing a full recapture was the actual "delay, then need
+  // to take another photo" complaint. Keyed by job+target status so it's
+  // never reused for the wrong job or a since-changed transition; cleared
+  // once the attempt is actually handed off (sent live or queued offline).
+  const pendingCaptureRef = useRef<{
+    jobId: string;
+    nextStatus: JobStatus;
+    photo?: string;
+    lat?: number;
+    lng?: number;
+  } | null>(null);
+
   // Stable across renders (deps are themselves stable) — passed straight
   // into the memoized JobCard as onAdvance, so tapping one card's action
   // button doesn't invalidate every other card's memo.
@@ -384,7 +408,15 @@ export function DriverJobsScreen() {
       let photo: string | undefined;
       let lat: number | undefined;
       let lng: number | undefined;
-      if (isPhotoRequired(action.next, job)) {
+
+      const pending = pendingCaptureRef.current;
+      const reusable = pending && pending.jobId === job.id && pending.nextStatus === action.next;
+
+      if (reusable) {
+        photo = pending.photo;
+        lat = pending.lat;
+        lng = pending.lng;
+      } else if (isPhotoRequired(action.next, job)) {
         try {
           const captured = await capturePhoto(ImagePicker.CameraType.back);
           if (!captured) {
@@ -404,13 +436,20 @@ export function DriverJobsScreen() {
           lat = coords.lat;
           lng = coords.lng;
         }
+        pendingCaptureRef.current = { jobId: job.id, nextStatus: action.next, photo, lat, lng };
       }
 
       setUpdatingId(job.id);
       try {
         const sent = await sendStatusUpdate(job, action.next, { photo, lat, lng });
+        // Handed off either way (sent live, or handed to the offline queue) —
+        // nothing left to retry with this same captured photo.
+        pendingCaptureRef.current = null;
         if (sent) await load();
       } catch (e) {
+        // Deliberately NOT clearing pendingCaptureRef here — see the comment
+        // above it. Tapping the action again will resubmit with this same
+        // photo instead of reopening the camera.
         setError(e instanceof ApiError ? e.message : "Could not update job");
       } finally {
         setUpdatingId(null);

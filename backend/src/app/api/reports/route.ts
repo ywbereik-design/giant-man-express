@@ -77,25 +77,29 @@ export async function POST(req: NextRequest) {
   const totalHours = rows.reduce((sum, r) => sum + r.hours, 0);
   const totalDistanceKm = rows.reduce((sum, r) => sum + r.distanceKm, 0);
 
-  const reportNumber = await nextNumber("HR", "hours_report");
-
   // The findFirst check above handles the common sequential-duplicate case
   // with a friendly message; the @@unique([driverId, periodStart, periodEnd])
   // constraint is the backstop for two concurrent requests both passing that
   // check before either commits (e.g. a double-tap) — runOrRespond turns the
-  // resulting P2002 into a clean 409 instead of an unhandled 500.
+  // resulting P2002 into a clean 409 instead of an unhandled 500. The number
+  // increment and the row insert share one transaction so a collision rolls
+  // both back together instead of burning a report number on a request that
+  // never produced a report.
   const result = await runOrRespond(() =>
-    prisma.hoursReport.create({
-      data: {
-        reportNumber,
-        driverId,
-        periodStart: start,
-        periodEnd: end,
-        totalHours,
-        totalDistanceKm,
-        entriesJson: JSON.stringify(rows),
-      },
-      include: { driver: { select: { name: true, employeeCode: true } } },
+    prisma.$transaction(async (tx) => {
+      const reportNumber = await nextNumber("HR", "hours_report", tx);
+      return tx.hoursReport.create({
+        data: {
+          reportNumber,
+          driverId,
+          periodStart: start,
+          periodEnd: end,
+          totalHours,
+          totalDistanceKm,
+          entriesJson: JSON.stringify(rows),
+        },
+        include: { driver: { select: { name: true, employeeCode: true } } },
+      });
     })
   );
   if (isResponse(result)) return result;

@@ -141,6 +141,30 @@ describe("PATCH /api/driver/jobs/[id]/status", () => {
     expect(updated?.failedAt).toBeTruthy();
   });
 
+  it("only lets one of two concurrent status updates for the same job succeed", async () => {
+    // The sibling batch-status endpoint already re-checks status at write
+    // time to close exactly this race; this proves the single-job route now
+    // does the same instead of silently letting the last write win.
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id, status: "ARRIVED" });
+    const token = await driverToken(driver.id, driver.name);
+
+    const [r1, r2] = await Promise.all([
+      updateStatus(jsonRequest(`/api/driver/jobs/${job.id}/status`, "PATCH", { status: "PICKED_UP" }, token), {
+        params: { id: job.id },
+      }),
+      updateStatus(jsonRequest(`/api/driver/jobs/${job.id}/status`, "PATCH", { status: "PICKED_UP" }, token), {
+        params: { id: job.id },
+      }),
+    ]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    const final = await prisma.job.findUnique({ where: { id: job.id } });
+    expect(final?.status).toBe("PICKED_UP");
+  });
+
   it("returns 404 for a job that belongs to a different driver", async () => {
     const { driver: owner } = await createDriver();
     const { driver: intruder } = await createDriver();

@@ -86,8 +86,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const geoFields = GEO_FIELDS_ON[nextStatus];
 
-  const updated = await prisma.job.update({
-    where: { id: params.id },
+  // Re-checks status in the WHERE clause at write time, not just at the read
+  // above — otherwise two concurrent requests for the same job (a client
+  // retry racing an offline-queue replay, or a genuine double-tap) could
+  // both pass the transition check against the same stale read and both
+  // write, silently discarding one request's photo/geo/timestamp data.
+  // Mirrors the same guard already used in batch-status/route.ts.
+  const result = await prisma.job.updateMany({
+    where: { id: params.id, status: job.status },
     data: {
       status: nextStatus,
       [TIMESTAMP_FIELD[nextStatus]]: new Date(),
@@ -97,6 +103,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         : {}),
       ...(nextStatus === "FAILED" ? { failureReason: body.data.failureReason } : {}),
     },
+  });
+  if (result.count === 0) {
+    return Response.json({ error: "This job's status just changed — please retry." }, { status: 409 });
+  }
+
+  const updated = await prisma.job.findUnique({
+    where: { id: params.id },
     include: { jobType: true, business: true, dropoffStops: { orderBy: { sequence: "asc" } } },
   });
   return Response.json({ job: updated });

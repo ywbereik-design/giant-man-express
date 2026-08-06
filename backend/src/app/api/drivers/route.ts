@@ -5,7 +5,7 @@ import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 import { roundKm, startOfTodayUTC } from "@/lib/geo";
-import { SHIFT_PHOTO_EXPIRY_MS } from "@/lib/constants";
+import { PHONE_PATTERN, SHIFT_PHOTO_EXPIRY_MS } from "@/lib/constants";
 
 export async function GET(req: NextRequest) {
   // Dispatch gets read-only access here — they need the driver list to
@@ -112,7 +112,7 @@ const createSchema = z.object({
     .min(4)
     .max(8)
     .regex(/^\d+$/, "PIN must contain digits only"),
-  phone: z.string().trim().optional(),
+  phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
 });
 
 export async function POST(req: NextRequest) {

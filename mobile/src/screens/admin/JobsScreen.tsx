@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -23,6 +23,85 @@ const FILTERS = [
 type FilterId = (typeof FILTERS)[number]["id"];
 
 const ACTIVE_STATUSES: Job["status"][] = ["ASSIGNED", "ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY"];
+
+// Memoized and given its own useTheme()/styles rather than receiving them as
+// props — this is the FlatList renderItem's row, so on a long job list an
+// unmemoized version re-renders every single card on every keystroke in the
+// create-job form above it (the form's state lives in the parent, and an
+// inline renderItem closure is a new function every render regardless).
+// React.memo only pays off if every prop below is itself stable across
+// unrelated parent re-renders — see the useCallback'd onCancel and the
+// primitive isCancelling passed from AdminJobsScreen.
+const JobRow = memo(function JobRow({
+  item,
+  isCancelling,
+  onCancel,
+}: {
+  item: Job;
+  isCancelling: boolean;
+  onCancel: (job: Job) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
+  return (
+    <Card>
+      <View style={styles.headerRow}>
+        <Badge text={item.jobType.name} />
+        <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
+      </View>
+      <Text style={styles.title}>{item.title}</Text>
+      <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
+      {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
+      {item.pickupAddress && <AddressRow label="Pickup: " address={item.pickupAddress} />}
+      {item.dropoffStops.map((stop, i) => (
+        <AddressRow
+          key={stop.id}
+          label={item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
+          address={stop.address}
+        />
+      ))}
+      {reachedStages.length > 0 && (
+        <View style={styles.stageRow}>
+          {reachedStages.map((s) => (
+            <Badge
+              key={s.field}
+              text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
+              tone="muted"
+            />
+          ))}
+        </View>
+      )}
+      {item.status === "FAILED" && item.failureReason && (
+        <Text style={styles.failureText}>Failed: {item.failureReason}</Text>
+      )}
+      {(item.pickupPhoto || item.deliveryPhoto) && (
+        <View style={styles.photoRow}>
+          {item.pickupPhoto && (
+            <View style={styles.photoCol}>
+              <Text style={styles.photoLabel}>Pickup</Text>
+              <PhotoThumbnail uri={item.pickupPhoto} caption={photoCaption(item.pickupLat, item.pickupLng, item.pickedUpAt)} />
+            </View>
+          )}
+          {item.deliveryPhoto && (
+            <View style={styles.photoCol}>
+              <Text style={styles.photoLabel}>Delivery</Text>
+              <PhotoThumbnail
+                uri={item.deliveryPhoto}
+                caption={photoCaption(item.deliveryLat, item.deliveryLng, item.deliveredAt)}
+              />
+            </View>
+          )}
+        </View>
+      )}
+      {item.status !== "DELIVERED" && item.status !== "CANCELLED" && item.status !== "FAILED" && (
+        <View style={{ marginTop: spacing.sm }}>
+          <Button title="Cancel Job" variant="danger" onPress={() => onCancel(item)} loading={isCancelling} />
+        </View>
+      )}
+    </Card>
+  );
+});
 
 export function AdminJobsScreen() {
   const { colors } = useTheme();
@@ -148,25 +227,36 @@ export function AdminJobsScreen() {
     }
   }
 
-  function confirmCancelJob(job: Job) {
-    Alert.alert("Cancel this job?", `"${job.title}" will be marked as cancelled. This can't be undone.`, [
-      { text: "Keep Job", style: "cancel" },
-      { text: "Cancel Job", style: "destructive", onPress: () => cancelJob(job) },
-    ]);
-  }
+  const cancelJob = useCallback(
+    async (job: Job) => {
+      setCancellingId(job.id);
+      setError(null);
+      try {
+        await api.patch(`/api/jobs/${job.id}`, { status: "CANCELLED" });
+        await load();
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Could not cancel job");
+      } finally {
+        setCancellingId(null);
+      }
+    },
+    [load]
+  );
 
-  async function cancelJob(job: Job) {
-    setCancellingId(job.id);
-    setError(null);
-    try {
-      await api.patch(`/api/jobs/${job.id}`, { status: "CANCELLED" });
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not cancel job");
-    } finally {
-      setCancellingId(null);
-    }
-  }
+  const confirmCancelJob = useCallback(
+    (job: Job) => {
+      Alert.alert("Cancel this job?", `"${job.title}" will be marked as cancelled. This can't be undone.`, [
+        { text: "Keep Job", style: "cancel" },
+        { text: "Cancel Job", style: "destructive", onPress: () => cancelJob(job) },
+      ]);
+    },
+    [cancelJob]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Job }) => <JobRow item={item} isCancelling={cancellingId === item.id} onCancel={confirmCancelJob} />,
+    [cancellingId, confirmCancelJob]
+  );
 
   if (initialLoading) return <CenteredSpinner />;
 
@@ -250,74 +340,7 @@ export function AdminJobsScreen() {
         </View>
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No jobs in this view.</Text> : null}
-      renderItem={({ item }) => {
-        const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
-        return (
-          <Card>
-            <View style={styles.headerRow}>
-              <Badge text={item.jobType.name} />
-              <Badge text={item.status.replace("_", " ")} tone={STATUS_TONE[item.status]} />
-            </View>
-            <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.meta}>Driver: {item.driver?.name ?? "—"}</Text>
-            {item.business && <Text style={styles.meta}>Client: {item.business.name}</Text>}
-            {item.pickupAddress && <AddressRow label="Pickup: " address={item.pickupAddress} />}
-            {item.dropoffStops.map((stop, i) => (
-              <AddressRow
-                key={stop.id}
-                label={item.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-                address={stop.address}
-              />
-            ))}
-            {reachedStages.length > 0 && (
-              <View style={styles.stageRow}>
-                {reachedStages.map((s) => (
-                  <Badge
-                    key={s.field}
-                    text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
-                    tone="muted"
-                  />
-                ))}
-              </View>
-            )}
-            {item.status === "FAILED" && item.failureReason && (
-              <Text style={styles.failureText}>Failed: {item.failureReason}</Text>
-            )}
-            {(item.pickupPhoto || item.deliveryPhoto) && (
-              <View style={styles.photoRow}>
-                {item.pickupPhoto && (
-                  <View style={styles.photoCol}>
-                    <Text style={styles.photoLabel}>Pickup</Text>
-                    <PhotoThumbnail
-                      uri={item.pickupPhoto}
-                      caption={photoCaption(item.pickupLat, item.pickupLng, item.pickedUpAt)}
-                    />
-                  </View>
-                )}
-                {item.deliveryPhoto && (
-                  <View style={styles.photoCol}>
-                    <Text style={styles.photoLabel}>Delivery</Text>
-                    <PhotoThumbnail
-                      uri={item.deliveryPhoto}
-                      caption={photoCaption(item.deliveryLat, item.deliveryLng, item.deliveredAt)}
-                    />
-                  </View>
-                )}
-              </View>
-            )}
-            {item.status !== "DELIVERED" && item.status !== "CANCELLED" && item.status !== "FAILED" && (
-              <View style={{ marginTop: spacing.sm }}>
-                <Button
-                  title="Cancel Job"
-                  variant="danger"
-                  onPress={() => confirmCancelJob(item)}
-                  loading={cancellingId === item.id}
-                />
-              </View>
-            )}
-          </Card>
-        );
-      }}
+      renderItem={renderItem}
     />
   );
 }

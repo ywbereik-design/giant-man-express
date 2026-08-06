@@ -28,6 +28,9 @@ export function ChipSelect({
             key={opt.id}
             onPress={() => onSelect(opt.id)}
             style={[styles.chip, selected && styles.chipSelected]}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            accessibilityLabel={opt.label}
           >
             <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{opt.label}</Text>
           </Pressable>

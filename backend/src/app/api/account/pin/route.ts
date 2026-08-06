@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireActiveDriver, hashSecret, verifySecret, signSession } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
-import { isRateLimited, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
+import { consumeAttempt, clearAttempts } from "@/lib/rateLimit";
 
 // Self-service PIN change for the currently logged-in driver — distinct from
 // /api/drivers/[id], which lets an ADMIN reset any driver's PIN. This route
@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest) {
   const { currentPin, newPin } = body.data;
   const key = `account-pin:${auth.session.sub}`;
 
-  if (await isRateLimited(key)) {
+  if (await consumeAttempt(key)) {
     return Response.json(
       { error: "Too many failed attempts. Try again in a few minutes." },
       { status: 429 }
@@ -36,7 +36,6 @@ export async function PATCH(req: NextRequest) {
 
   const driver = await prisma.driver.findUnique({ where: { id: auth.session.sub } });
   if (!driver || !(await verifySecret(currentPin, driver.pinHash))) {
-    await recordFailedAttempt(key);
     // 400, not 401: the caller's session/token is perfectly valid — only the
     // *current PIN* they supplied for confirmation was wrong. A 401 here
     // would make the app's client treat this like an expired session and

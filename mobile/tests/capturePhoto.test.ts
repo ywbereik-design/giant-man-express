@@ -16,21 +16,21 @@ vi.mock("expo-image-manipulator", () => ({
 
 import { capturePhoto, base64ByteSize, COMPRESSION_STEPS, TARGET_MAX_BYTES } from "../src/lib/capturePhoto";
 
-// Each call to ImageManipulator.manipulate() returns a fresh context whose
-// eventual saveAsync() resolves to the next entry in this queue, in order —
-// mirrors the real API's per-step re-manipulate-from-source pattern.
+// capturePhoto() now renders once per distinct width and calls saveAsync()
+// again on that same rendered image for each quality step at that width
+// (see capturePhoto.ts), so the queued results line up with saveAsync()
+// calls — one per step — not with manipulate() calls, which only happen
+// when the target width actually changes.
 function queueManipulatorResults(base64Sequence: (string | undefined)[]) {
   let call = 0;
-  manipulate.mockImplementation(() => {
-    const base64 = base64Sequence[call++];
-    return {
-      resize: vi.fn(),
-      renderAsync: vi.fn().mockResolvedValue({
-        saveAsync: vi.fn().mockResolvedValue({ base64 }),
-      }),
-    };
-  });
+  const saveAsync = vi.fn().mockImplementation(() => Promise.resolve({ base64: base64Sequence[call++] }));
+  manipulate.mockImplementation(() => ({
+    resize: vi.fn(),
+    renderAsync: vi.fn().mockResolvedValue({ saveAsync }),
+  }));
 }
+
+const UNIQUE_STEP_WIDTHS = new Set(COMPRESSION_STEPS.map((s) => s.width)).size;
 
 function bigBase64(): string {
   // Decodes to well over the 500KB ceiling.
@@ -75,18 +75,20 @@ describe("capturePhoto", () => {
     expect(result).toMatch(/^data:image\/jpeg;base64,/);
   });
 
-  it("keeps trying subsequent steps until one lands under the ceiling", async () => {
+  it("keeps trying subsequent steps until one lands under the ceiling, without re-rendering for same-width steps", async () => {
     queueManipulatorResults([bigBase64(), bigBase64(), smallBase64()]);
     const result = await capturePhoto("back" as never);
-    expect(manipulate).toHaveBeenCalledTimes(3);
+    // All 3 attempts are the first 3 COMPRESSION_STEPS entries, which share
+    // the same width — one render, reused across all 3 quality attempts.
+    expect(manipulate).toHaveBeenCalledTimes(1);
     const encoded = result!.slice("data:image/jpeg;base64,".length);
     expect(base64ByteSize(encoded)).toBeLessThanOrEqual(TARGET_MAX_BYTES);
   });
 
-  it("falls back to the last attempt's output if every step stays over the ceiling", async () => {
+  it("falls back to the last attempt's output if every step stays over the ceiling, rendering once per distinct width", async () => {
     queueManipulatorResults(COMPRESSION_STEPS.map(() => bigBase64()));
     const result = await capturePhoto("back" as never);
-    expect(manipulate).toHaveBeenCalledTimes(COMPRESSION_STEPS.length);
+    expect(manipulate).toHaveBeenCalledTimes(UNIQUE_STEP_WIDTHS);
     expect(result).toMatch(/^data:image\/jpeg;base64,/);
   });
 
