@@ -31,6 +31,7 @@ const DriverRow = memo(function DriverRow({
   canManage,
   isEditing,
   isToggling,
+  isDeleting,
   editName,
   editPhone,
   editPin,
@@ -43,11 +44,13 @@ const DriverRow = memo(function DriverRow({
   onCancelEdit,
   onSaveEdit,
   onToggleActive,
+  onDelete,
 }: {
   item: Driver;
   canManage: boolean;
   isEditing: boolean;
   isToggling: boolean;
+  isDeleting: boolean;
   editName: string;
   editPhone: string;
   editPin: string;
@@ -60,6 +63,7 @@ const DriverRow = memo(function DriverRow({
   onCancelEdit: () => void;
   onSaveEdit: (driver: Driver) => void;
   onToggleActive: (driver: Driver) => void;
+  onDelete: (driver: Driver) => void;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -142,6 +146,11 @@ const DriverRow = memo(function DriverRow({
           </View>
         </View>
       )}
+      {canManage && (
+        <View style={{ marginTop: spacing.sm }}>
+          <Button title="Delete Driver" variant="danger" onPress={() => onDelete(item)} loading={isDeleting} />
+        </View>
+      )}
     </Card>
   );
 });
@@ -161,6 +170,7 @@ export function DriversScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -251,6 +261,39 @@ export function DriversScreen() {
     [toggleActive]
   );
 
+  const deleteDriver = useCallback(
+    async (driver: Driver) => {
+      setDeletingId(driver.id);
+      setError(null);
+      try {
+        await api.delete(`/api/drivers/${driver.id}`);
+        await load();
+      } catch (e) {
+        // The backend refuses (409) if this driver has any job/shift/report
+        // history — that message ("...deactivate them instead") is exactly
+        // what should surface here, not a generic fallback.
+        setError(e instanceof ApiError ? e.message : "Could not delete driver");
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [load]
+  );
+
+  const confirmDeleteDriver = useCallback(
+    (driver: Driver) => {
+      Alert.alert(
+        "Delete this driver?",
+        `"${driver.name}" will be permanently deleted. This only works if they have no job or shift history — otherwise, deactivate instead.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => deleteDriver(driver) },
+        ]
+      );
+    },
+    [deleteDriver]
+  );
+
   const startEdit = useCallback((driver: Driver) => {
     setEditingId(driver.id);
     setEditName(driver.name);
@@ -303,6 +346,7 @@ export function DriversScreen() {
           canManage={canManage}
           isEditing={isEditing}
           isToggling={togglingId === item.id}
+          isDeleting={deletingId === item.id}
           editName={isEditing ? editName : ""}
           editPhone={isEditing ? editPhone : ""}
           editPin={isEditing ? editPin : ""}
@@ -315,10 +359,26 @@ export function DriversScreen() {
           onCancelEdit={cancelEdit}
           onSaveEdit={saveEdit}
           onToggleActive={confirmToggleActive}
+          onDelete={confirmDeleteDriver}
         />
       );
     },
-    [canManage, editingId, togglingId, editName, editPhone, editPin, editError, editSaving, startEdit, cancelEdit, saveEdit, confirmToggleActive]
+    [
+      canManage,
+      editingId,
+      togglingId,
+      deletingId,
+      editName,
+      editPhone,
+      editPin,
+      editError,
+      editSaving,
+      startEdit,
+      cancelEdit,
+      saveEdit,
+      confirmToggleActive,
+      confirmDeleteDriver,
+    ]
   );
 
   if (initialLoading) return <CenteredSpinner />;
