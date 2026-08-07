@@ -75,3 +75,11 @@ export const PHONE_PATTERN = /^[\d+()\-.\s]{7,20}$/;
 export const MAX_JOB_TEXT_LENGTH = 300;
 export const MAX_JOB_NOTES_LENGTH = 2000;
 export const MAX_DROPOFF_STOPS = 50;
+
+// Caller-supplied billing/report windows (invoice generation, hours-by-
+// business) had no upper bound — a multi-year periodStart/periodEnd pulls
+// every matching job into memory in one unbounded query. 366 days (not 365,
+// to not reject a plain "last calendar year" range across a leap year)
+// covers every real billing cycle this app actually needs; anything longer
+// should be run as several smaller requests instead.
+export const MAX_BILLING_PERIOD_DAYS = 366;

@@ -14,6 +14,27 @@ import {
 import { safeDriverSelect } from "@/lib/select";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 
+// The single-job detail view — unlike GET /api/jobs's list select, this
+// includes the full pickup/delivery photos, since a full-size payload for
+// exactly one job is fine; it's only a *page* of many jobs' photos at once
+// that's the problem (see JOB_LIST_SELECT in ../route.ts).
+const JOB_DETAIL_INCLUDE = {
+  jobType: true,
+  driver: { select: safeDriverSelect },
+  business: true,
+  dropoffStops: { orderBy: { sequence: "asc" as const } },
+};
+
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireRole(req, ["ADMIN", "DISPATCH"]);
+  if ("error" in auth) return auth.error;
+
+  const job = await prisma.job.findUnique({ where: { id: params.id }, include: JOB_DETAIL_INCLUDE });
+  if (!job) return Response.json({ error: "Not found" }, { status: 404 });
+
+  return Response.json({ job });
+}
+
 const updateSchema = z.object({
   title: z.string().trim().min(1).max(MAX_JOB_TEXT_LENGTH).optional(),
   jobTypeId: z.string().min(1).optional(),

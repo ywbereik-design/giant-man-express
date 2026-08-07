@@ -35,6 +35,14 @@ export function DriverLiveMap({ driverId }: Props) {
   const [etaMinutes, setEtaMinutes] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noActiveJob, setNoActiveJob] = useState(false);
+  // Distinct from "still on the first attempt" — geocodeAddress swallows
+  // its own failures and returns null, and without this the component was
+  // stuck showing a plain "Locating…" forever on persistent failure with no
+  // indication anything was wrong. The 25s poll loop already retries
+  // automatically (a failed address is never recorded into
+  // lastGeocodedAddress), so this only needs to surface honest status, not
+  // add a manual retry.
+  const [geocodeFailed, setGeocodeFailed] = useState(false);
   // A job's destination address is typically static for the whole delivery —
   // skip re-geocoding (a paid API call) on every 25s poll when it hasn't
   // actually changed since the last one.
@@ -66,9 +74,13 @@ export function DriverLiveMap({ driverId }: Props) {
           setDestinationLabel(dest.label);
           if (dest.address !== lastGeocodedAddress.current) {
             const coords = await geocodeAddress(dest.address);
-            if (!cancelled && coords) {
+            if (cancelled) return;
+            if (coords) {
               lastGeocodedAddress.current = dest.address;
               setDestination(coords);
+              setGeocodeFailed(false);
+            } else {
+              setGeocodeFailed(true);
             }
           }
         } else {
@@ -127,7 +139,11 @@ export function DriverLiveMap({ driverId }: Props) {
   if (!destination) {
     return (
       <View style={[styles.fallback, styles.loading]}>
-        <Text style={styles.fallbackText}>Locating {(destinationLabel ?? "destination").toLowerCase()}…</Text>
+        <Text style={styles.fallbackText}>
+          {geocodeFailed
+            ? `Couldn't map ${(destinationLabel ?? "the destination").toLowerCase()} — retrying automatically.`
+            : `Locating ${(destinationLabel ?? "destination").toLowerCase()}…`}
+        </Text>
       </View>
     );
   }

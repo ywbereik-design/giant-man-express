@@ -57,6 +57,44 @@ describe("POST /api/invoices", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects a period longer than the max billing window, before it ever queries jobs", async () => {
+    const { staff } = await createStaff();
+    const business = await createBusiness();
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createInvoice(
+      jsonRequest(
+        "/api/invoices",
+        "POST",
+        { businessId: business.id, periodStart: "2020-01-01T00:00:00.000Z", periodEnd: "2026-01-01T00:00:00.000Z" },
+        token
+      )
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.details.fieldErrors.periodEnd[0]).toMatch(/can't span more than/i);
+  });
+
+  it("accepts a period right at the max billing window", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness({ billingRate: 75 });
+    const periodStart = "2025-01-01T00:00:00.000Z";
+    const periodEnd = "2026-01-02T00:00:00.000Z"; // exactly 366 days
+    await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      deliveredAt: new Date("2025-06-01T00:00:00.000Z"),
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createInvoice(jsonRequest("/api/invoices", "POST", { businessId: business.id, periodStart, periodEnd }, token));
+    expect(res.status).toBe(201);
+  });
+
   it("never bills the same delivered job twice", async () => {
     const { staff } = await createStaff();
     const { driver } = await createDriver();

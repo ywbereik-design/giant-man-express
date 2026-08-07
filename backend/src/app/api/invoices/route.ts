@@ -6,6 +6,7 @@ import { parseBody, isError } from "@/lib/api";
 import { nextNumber } from "@/lib/numbering";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 import { parsePaginationParams, buildPage } from "@/lib/pagination";
+import { MAX_BILLING_PERIOD_DAYS } from "@/lib/constants";
 
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
@@ -35,7 +36,14 @@ const createSchema = z
   .refine((data) => new Date(data.periodStart) < new Date(data.periodEnd), {
     message: "periodStart must be before periodEnd",
     path: ["periodEnd"],
-  });
+  })
+  // Without this, an unbounded range pulls every un-invoiced delivered job
+  // for the business into one query with no limit — a caller-controlled
+  // resource-exhaustion vector, not just a UX nuisance.
+  .refine(
+    (data) => new Date(data.periodEnd).getTime() - new Date(data.periodStart).getTime() <= MAX_BILLING_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+    { message: `The billing period can't span more than ${MAX_BILLING_PERIOD_DAYS} days`, path: ["periodEnd"] }
+  );
 
 export async function POST(req: NextRequest) {
   const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);

@@ -13,6 +13,10 @@ export async function GET(req: NextRequest) {
   const rows = await prisma.timeEntry.findMany({
     where: { driverId: auth.session.sub },
     orderBy: [{ clockInAt: "desc" }, { id: "desc" }],
+    // The driver's own shift-history screen never displays clockInPhoto —
+    // excluding it here avoids pulling up to 100 full selfie images (up to
+    // 3MB each) into one response for a list that only shows times/hours/km.
+    select: { id: true, clockInAt: true, clockInLat: true, clockInLng: true, clockOutAt: true, clockOutLat: true, clockOutLng: true, distanceKm: true },
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });

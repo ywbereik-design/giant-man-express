@@ -11,6 +11,7 @@ import { useTheme } from "../../theme/ThemeContext";
 import { isShiftTrackingActive, startShiftTracking, stopShiftTracking } from "../../location/shiftTracking";
 import { captureSelfie } from "../../lib/captureSelfie";
 import { getCoords } from "../../lib/getCoords";
+import { submitClockAction, flushQueuedClockActions } from "../../lib/clockQueue";
 import { formatTime } from "../../lib/dateRange";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 
@@ -32,6 +33,10 @@ export function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    // Best-effort — a still-offline flush just leaves the queue as-is; any
+    // genuinely rejected item is dropped inside flushQueuedClockActions
+    // itself, not here.
+    await flushQueuedClockActions().catch(() => {});
     try {
       const res = await api.get<StatusResponse>("/api/driver/status");
       setStatus(res);
@@ -103,10 +108,20 @@ export function HomeScreen() {
       }
 
       const { coords, locationCaptured } = await getCoords();
-      await api.post("/api/driver/clock-in", { ...(coords ?? {}), selfie });
+      // On a genuine network failure this queues the clock-in instead of
+      // throwing — same resilience the offline job-status queue already
+      // gives every other driver action. Start tracking regardless of
+      // whether it was sent live or queued: the driver's shift has actually
+      // started either way, and deferring that until the server confirms
+      // (which might not happen for a while, offline) would silently miss
+      // mileage for however long the connection stays down.
+      const sent = await submitClockAction("clock-in", { ...(coords ?? {}), selfie });
 
       const trackingMode = await startShiftTracking();
       const notices: string[] = [];
+      if (!sent) {
+        notices.push("You're offline — clocking in is saved and will sync automatically once you're back online.");
+      }
       if (!locationCaptured) {
         notices.push("Clocked in, but your location wasn't recorded (permission denied or unavailable).");
       }
@@ -117,7 +132,14 @@ export function HomeScreen() {
       }
       if (notices.length) setNotice(notices.join(" "));
 
-      await load();
+      if (sent) {
+        await load();
+      } else {
+        // Don't call load() here — the server doesn't know about this
+        // clock-in yet, so it would still report clockedIn: false and
+        // undo the UI state (and the tracking start above) we just set.
+        setStatus((prev) => ({ clockedIn: true, openEntry: prev?.openEntry ?? null }));
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not clock in");
     } finally {
@@ -129,20 +151,32 @@ export function HomeScreen() {
     setError(null);
     setNotice(null);
     setBusy(true);
-    // Stop tracking immediately on clock-out, before anything else, so no
-    // further location pings can be sent for this closed shift.
-    try {
-      await stopShiftTracking();
-    } catch {
-      // best-effort — don't block clocking out on this
-    }
+    // Tracking is now stopped AFTER the clock-out attempt resolves, not
+    // before — stopping first meant a request that failed for a real
+    // reason (not just "offline") left tracking off while the server still
+    // thought the shift was open, with nothing recording mileage in
+    // between. "Sent live" and "queued" both stop tracking (the driver is
+    // genuinely done either way); an actual rejection below does not.
     try {
       const { coords, locationCaptured } = await getCoords();
-      await api.post("/api/driver/clock-out", coords ?? {});
-      if (!locationCaptured) {
-        setNotice("Clocked out, but your location wasn't recorded (permission denied or unavailable).");
+      const sent = await submitClockAction("clock-out", coords ?? {});
+      try {
+        await stopShiftTracking();
+      } catch {
+        // best-effort — don't block clocking out on this
       }
-      await load();
+      if (sent) {
+        if (!locationCaptured) {
+          setNotice("Clocked out, but your location wasn't recorded (permission denied or unavailable).");
+        }
+        await load();
+      } else {
+        // Don't call load() here — the server doesn't know about this
+        // clock-out yet and would still report clockedIn: true, undoing
+        // the local state (and the tracking stop above) we just set.
+        setStatus((prev) => (prev ? { ...prev, clockedIn: false } : prev));
+        setNotice("You're offline — clocking out is saved and will sync automatically once you're back online.");
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not clock out");
     } finally {

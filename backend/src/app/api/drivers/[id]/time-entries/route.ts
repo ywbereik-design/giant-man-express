@@ -11,7 +11,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if ("error" in auth) return auth.error;
 
   const { searchParams } = new URL(req.url);
-  const { cursor, limit } = parsePaginationParams(searchParams, 200, 200);
+  // Unlike every other paginated endpoint, this one's whole purpose is
+  // showing the clock-in selfie per row (SelfieReportsScreen) — the photo
+  // can't be select()ed away the way the driver's own /driver/time-entries
+  // route does it. Instead, keep the page small: 200 rows at up to 3MB each
+  // was the exact "hundreds of MB in one response" problem flagged in the
+  // audit; 20-50 rows of real ~350KB compressed selfies is a few MB, which
+  // is the actual bound that matters here.
+  const { cursor, limit } = parsePaginationParams(searchParams, 20, 50);
 
   const rows = await prisma.timeEntry.findMany({
     where: { driverId: params.id },

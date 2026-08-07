@@ -110,9 +110,12 @@ export interface Job {
   failureReason: FailureReason | null;
   // Proof-of-pickup / proof-of-delivery photos, captured by the driver at
   // the ARRIVED->PICKED_UP and ON_THE_WAY->DELIVERED transitions. Null for
-  // jobs that haven't reached that stage yet, or predate this feature.
-  pickupPhoto: string | null;
-  deliveryPhoto: string | null;
+  // jobs that haven't reached that stage yet, or predate this feature —
+  // and entirely absent (not even null) on list responses (GET /api/jobs),
+  // which deliberately exclude these to avoid a multi-hundred-MB payload;
+  // only the single-job detail fetch (GET /api/jobs/:id) includes them.
+  pickupPhoto?: string | null;
+  deliveryPhoto?: string | null;
   // Device GPS at the moment each photo above was captured — null unless
   // location was available/granted at that time.
   pickupLat: number | null;

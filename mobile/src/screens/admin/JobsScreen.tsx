@@ -37,17 +37,66 @@ const JobRow = memo(function JobRow({
   item,
   isCancelling,
   onCancel,
-  deletingPhotoType,
-  onDeletePhoto,
 }: {
   item: Job;
   isCancelling: boolean;
   onCancel: (job: Job) => void;
-  deletingPhotoType: "pickup" | "delivery" | null;
-  onDeletePhoto: (job: Job, type: "pickup" | "delivery") => void;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Pickup/delivery photos are deliberately excluded from GET /api/jobs's
+  // list response (a page of up to 200 jobs with both photos could be
+  // hundreds of MB — see JOB_LIST_SELECT on the backend) and fetched here
+  // on demand instead, one job at a time, only when actually opened.
+  type PhotoState = { pickupPhoto: string | null; pickupLat: number | null; pickupLng: number | null; deliveryPhoto: string | null; deliveryLat: number | null; deliveryLng: number | null };
+  const [photos, setPhotos] = useState<PhotoState | null>(null);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [photosError, setPhotosError] = useState<string | null>(null);
+  const [deletingType, setDeletingType] = useState<"pickup" | "delivery" | null>(null);
+
+  const mayHavePhotos = item.status !== "ASSIGNED" && item.status !== "ACCEPTED" && item.status !== "ARRIVED";
+
+  async function loadPhotos() {
+    setLoadingPhotos(true);
+    setPhotosError(null);
+    try {
+      const res = await api.get<{ job: Job }>(`/api/jobs/${item.id}`);
+      setPhotos({
+        pickupPhoto: res.job.pickupPhoto ?? null,
+        pickupLat: res.job.pickupLat ?? null,
+        pickupLng: res.job.pickupLng ?? null,
+        deliveryPhoto: res.job.deliveryPhoto ?? null,
+        deliveryLat: res.job.deliveryLat ?? null,
+        deliveryLng: res.job.deliveryLng ?? null,
+      });
+    } catch (e) {
+      setPhotosError(e instanceof ApiError ? e.message : "Could not load photos");
+    } finally {
+      setLoadingPhotos(false);
+    }
+  }
+
+  async function deletePhoto(type: "pickup" | "delivery") {
+    setDeletingType(type);
+    setPhotosError(null);
+    try {
+      await api.delete(`/api/jobs/${item.id}/photo?type=${type}`);
+      setPhotos((prev) => (prev ? { ...prev, [type === "pickup" ? "pickupPhoto" : "deliveryPhoto"]: null } : prev));
+    } catch (e) {
+      setPhotosError(e instanceof ApiError ? e.message : "Could not delete photo");
+    } finally {
+      setDeletingType(null);
+    }
+  }
+
+  function confirmDeletePhoto(type: "pickup" | "delivery") {
+    Alert.alert(`Delete this ${type} photo?`, "The job's status and timestamps stay — only the photo is removed. This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deletePhoto(type) },
+    ]);
+  }
+
   return (
     <Card>
       <View style={styles.headerRow}>
@@ -69,33 +118,29 @@ const JobRow = memo(function JobRow({
       {item.status === "FAILED" && item.failureReason && (
         <Text style={styles.failureText}>Failed: {item.failureReason}</Text>
       )}
-      {(item.pickupPhoto || item.deliveryPhoto) && (
-        <View style={styles.photoRow}>
-          {item.pickupPhoto && (
-            <View style={styles.photoCol}>
-              <Text style={styles.photoLabel}>Pickup</Text>
-              <PhotoThumbnail uri={item.pickupPhoto} caption={photoCaption(item.pickupLat, item.pickupLng, item.pickedUpAt)} />
-              <Button
-                title="Delete"
-                variant="danger"
-                onPress={() => onDeletePhoto(item, "pickup")}
-                loading={deletingPhotoType === "pickup"}
-              />
-            </View>
+      {mayHavePhotos && (
+        <View style={{ marginTop: spacing.sm }}>
+          {!photos && <Button title="View Photos" variant="secondary" onPress={loadPhotos} loading={loadingPhotos} />}
+          <ErrorText>{photosError}</ErrorText>
+          {photos && !photos.pickupPhoto && !photos.deliveryPhoto && (
+            <Text style={styles.meta}>No photos on file for this job.</Text>
           )}
-          {item.deliveryPhoto && (
-            <View style={styles.photoCol}>
-              <Text style={styles.photoLabel}>Delivery</Text>
-              <PhotoThumbnail
-                uri={item.deliveryPhoto}
-                caption={photoCaption(item.deliveryLat, item.deliveryLng, item.deliveredAt)}
-              />
-              <Button
-                title="Delete"
-                variant="danger"
-                onPress={() => onDeletePhoto(item, "delivery")}
-                loading={deletingPhotoType === "delivery"}
-              />
+          {photos && (photos.pickupPhoto || photos.deliveryPhoto) && (
+            <View style={styles.photoRow}>
+              {photos.pickupPhoto && (
+                <View style={styles.photoCol}>
+                  <Text style={styles.photoLabel}>Pickup</Text>
+                  <PhotoThumbnail uri={photos.pickupPhoto} caption={photoCaption(photos.pickupLat, photos.pickupLng, item.pickedUpAt)} />
+                  <Button title="Delete" variant="danger" onPress={() => confirmDeletePhoto("pickup")} loading={deletingType === "pickup"} />
+                </View>
+              )}
+              {photos.deliveryPhoto && (
+                <View style={styles.photoCol}>
+                  <Text style={styles.photoLabel}>Delivery</Text>
+                  <PhotoThumbnail uri={photos.deliveryPhoto} caption={photoCaption(photos.deliveryLat, photos.deliveryLng, item.deliveredAt)} />
+                  <Button title="Delete" variant="danger" onPress={() => confirmDeletePhoto("delivery")} loading={deletingType === "delivery"} />
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -132,7 +177,6 @@ export function AdminJobsScreen() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [deletingPhoto, setDeletingPhoto] = useState<{ jobId: string; type: "pickup" | "delivery" } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -279,42 +323,9 @@ export function AdminJobsScreen() {
     [cancelJob]
   );
 
-  const deletePhoto = useCallback(async (job: Job, type: "pickup" | "delivery") => {
-    setDeletingPhoto({ jobId: job.id, type });
-    setError(null);
-    try {
-      await api.delete(`/api/jobs/${job.id}/photo?type=${type}`);
-      setJobs((prev) =>
-        prev.map((j) => (j.id === job.id ? { ...j, [type === "pickup" ? "pickupPhoto" : "deliveryPhoto"]: null } : j))
-      );
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not delete photo");
-    } finally {
-      setDeletingPhoto(null);
-    }
-  }, []);
-
-  const confirmDeletePhoto = useCallback(
-    (job: Job, type: "pickup" | "delivery") => {
-      Alert.alert(`Delete this ${type} photo?`, "The job's status and timestamps stay — only the photo is removed. This can't be undone.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => deletePhoto(job, type) },
-      ]);
-    },
-    [deletePhoto]
-  );
-
   const renderItem = useCallback(
-    ({ item }: { item: Job }) => (
-      <JobRow
-        item={item}
-        isCancelling={cancellingId === item.id}
-        onCancel={confirmCancelJob}
-        deletingPhotoType={deletingPhoto?.jobId === item.id ? deletingPhoto.type : null}
-        onDeletePhoto={confirmDeletePhoto}
-      />
-    ),
-    [cancellingId, confirmCancelJob, deletingPhoto, confirmDeletePhoto]
+    ({ item }: { item: Job }) => <JobRow item={item} isCancelling={cancellingId === item.id} onCancel={confirmCancelJob} />,
+    [cancellingId, confirmCancelJob]
   );
 
   if (initialLoading) return <CenteredSpinner />;

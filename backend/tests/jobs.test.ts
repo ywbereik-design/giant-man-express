@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { prisma } from "@/lib/db";
 import { GET as listJobs, POST as createJobRoute } from "@/app/api/jobs/route";
-import { createStaff, createDriver, createJobType, tokenFor, jsonRequest, getRequest } from "./helpers";
+import { GET as getJobRoute } from "@/app/api/jobs/[id]/route";
+import { createStaff, createDriver, createJob, createJobType, tokenFor, jsonRequest, getRequest, FAKE_PHOTO } from "./helpers";
 
 describe("POST /api/jobs", () => {
   it("lets dispatch create a job for an active driver and job type", async () => {
@@ -102,5 +104,53 @@ describe("GET /api/jobs", () => {
 
     const allIds = [...page1.jobs, ...page2.jobs].map((j: { id: string }) => j.id);
     expect(new Set(allIds).size).toBe(3);
+  });
+
+  it("excludes pickupPhoto/deliveryPhoto from the list response even when set", async () => {
+    const { staff } = await createStaff();
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id });
+    await prisma.job.update({ where: { id: job.id }, data: { pickupPhoto: FAKE_PHOTO, deliveryPhoto: FAKE_PHOTO } });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await listJobs(getRequest(`/api/jobs?driverId=${driver.id}`, token));
+    const body = await res.json();
+    const listed = body.jobs.find((j: { id: string }) => j.id === job.id);
+    expect(listed).toBeDefined();
+    expect(listed).not.toHaveProperty("pickupPhoto");
+    expect(listed).not.toHaveProperty("deliveryPhoto");
+  });
+});
+
+describe("GET /api/jobs/[id]", () => {
+  it("returns the full job including photos", async () => {
+    const { staff } = await createStaff();
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id });
+    await prisma.job.update({ where: { id: job.id }, data: { pickupPhoto: FAKE_PHOTO } });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await getJobRoute(getRequest(`/api/jobs/${job.id}`, token), { params: { id: job.id } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.job.pickupPhoto).toBe(FAKE_PHOTO);
+  });
+
+  it("returns 404 for a nonexistent job", async () => {
+    const { staff } = await createStaff();
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+    const res = await getJobRoute(getRequest("/api/jobs/does-not-exist", token), { params: { id: "does-not-exist" } });
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects a driver-role session", async () => {
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id });
+    const token = await tokenFor(driver.id, "DRIVER", driver.name);
+    const res = await getJobRoute(getRequest(`/api/jobs/${job.id}`, token), { params: { id: job.id } });
+    expect(res.status).toBe(403);
   });
 });

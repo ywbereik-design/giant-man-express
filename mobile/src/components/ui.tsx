@@ -99,6 +99,9 @@ export function Button({ title, variant = "primary", loading, disabled, ...rest 
         styles.button,
         { backgroundColor: bg, opacity: pressed || disabled ? 0.7 : 1 },
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       {...rest}
     >
       {loading ? (

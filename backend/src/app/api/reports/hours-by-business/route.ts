@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { MAX_BILLING_PERIOD_DAYS } from "@/lib/constants";
 
 const querySchema = z
   .object({
@@ -13,7 +14,13 @@ const querySchema = z
   .refine((data) => new Date(data.periodStart) < new Date(data.periodEnd), {
     message: "periodStart must be before periodEnd",
     path: ["periodEnd"],
-  });
+  })
+  // Same reasoning as /api/invoices — an unbounded range here becomes one
+  // unbounded prisma.job.findMany with no take/limit.
+  .refine(
+    (data) => new Date(data.periodEnd).getTime() - new Date(data.periodStart).getTime() <= MAX_BILLING_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+    { message: `The period can't span more than ${MAX_BILLING_PERIOD_DAYS} days`, path: ["periodEnd"] }
+  );
 
 // Live, read-only view of hours worked per client, derived from each Job's
 // own pickedUpAt -> deliveredAt window (time actively spent executing that

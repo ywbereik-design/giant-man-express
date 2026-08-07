@@ -15,6 +15,41 @@ const JOB_INCLUDE = {
   dropoffStops: { orderBy: { sequence: "asc" as const } },
 };
 
+// Used only by the list route below — deliberately a `select`, not the
+// `include` above, so it can name every scalar field EXCEPT pickupPhoto/
+// deliveryPhoto. Each can hold up to 3MB of base64 text; a full page of up
+// to 200 delivered jobs with both photos populated could be well over 1GB
+// in one response, for a list view that only needs status/title/driver/
+// business summary info. GET /api/jobs/[id] is the single-job detail route
+// that actually includes the photos, for when a specific job is opened.
+const JOB_LIST_SELECT = {
+  id: true,
+  title: true,
+  jobTypeId: true,
+  jobType: true,
+  driverId: true,
+  driver: { select: safeDriverSelect },
+  businessId: true,
+  business: true,
+  pickupAddress: true,
+  clientPhone: true,
+  notes: true,
+  status: true,
+  createdAt: true,
+  dropoffStops: { orderBy: { sequence: "asc" as const } },
+  acceptedAt: true,
+  arrivedAt: true,
+  pickedUpAt: true,
+  onTheWayAt: true,
+  deliveredAt: true,
+  failedAt: true,
+  pickupLat: true,
+  pickupLng: true,
+  deliveryLat: true,
+  deliveryLng: true,
+  failureReason: true,
+} as const;
+
 export async function GET(req: NextRequest) {
   // Dispatch and admin both need full visibility into jobs — dispatching
   // and tracking jobs is dispatch's core function.
@@ -32,7 +67,7 @@ export async function GET(req: NextRequest) {
       ...(driverId ? { driverId } : {}),
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    include: JOB_INCLUDE,
+    select: JOB_LIST_SELECT,
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });

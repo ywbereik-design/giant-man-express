@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as Location from "expo-location";
 import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
@@ -35,6 +35,12 @@ export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) 
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Distinct from "still geocoding" — without this, a failure (offline,
+  // quota, bad address) left destination permanently null with no way to
+  // tell "still trying" from "gave up", so the component was stuck showing
+  // "Locating…" forever with no error and no retry.
+  const [geocodeFailed, setGeocodeFailed] = useState(false);
+  const [geocodeAttempt, setGeocodeAttempt] = useState(0);
 
   useEffect(() => {
     let subscription: Location.LocationSubscription | null = null;
@@ -60,13 +66,18 @@ export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) 
   useEffect(() => {
     let cancelled = false;
     setDestination(null);
+    setGeocodeFailed(false);
     geocodeAddress(destinationAddress).then((coords) => {
-      if (!cancelled && coords) setDestination(coords);
+      if (cancelled) return;
+      if (coords) setDestination(coords);
+      else setGeocodeFailed(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [destinationAddress]);
+  }, [destinationAddress, geocodeAttempt]);
+
+  const retryGeocode = useCallback(() => setGeocodeAttempt((n) => n + 1), []);
 
   if (!GOOGLE_MAPS_API_KEY) {
     return (
@@ -83,6 +94,20 @@ export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) 
     return (
       <View style={styles.fallback}>
         <Text style={styles.fallbackText}>{error}</Text>
+      </View>
+    );
+  }
+
+  if (geocodeFailed) {
+    return (
+      <View style={styles.fallback}>
+        <Text style={styles.fallbackText}>Couldn't map this address — check your connection.</Text>
+        <Text style={styles.fallbackAddress}>
+          {destinationLabel}: {destinationAddress}
+        </Text>
+        <Pressable onPress={retryGeocode} hitSlop={8} accessibilityRole="button" accessibilityLabel="Retry">
+          <Text style={styles.retryText}>Retry</Text>
+        </Pressable>
       </View>
     );
   }
@@ -175,6 +200,12 @@ function makeStyles(colors: ThemeColors) {
       fontSize: 13,
       marginTop: spacing.xs,
       fontWeight: "600",
+    },
+    retryText: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: "700",
+      marginTop: spacing.sm,
     },
   });
 }

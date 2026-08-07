@@ -13,9 +13,16 @@ export const darkColors = {
   primaryText: "#151515",
   text: "#f4f4f5",
   textMuted: "#9aa0ab",
-  danger: "#e5484d",
-  success: "#3fb950",
-  info: "#4a9eff",
+  // Badge always renders white text on these three regardless of theme
+  // (see badgeText in ui.tsx) — the original dark-mode values here measured
+  // ~2.5-3.9:1 against white, all failing the 4.5:1 WCAG AA minimum for
+  // normal-size text. Reusing the light palette's values isn't a shortcut:
+  // each was independently recomputed here and passes cleanly against white
+  // (danger ~4.9:1, success ~5.0:1, info ~5.3:1), and they read fine as
+  // saturated accent colors against this near-black background too.
+  danger: "#DC2626",
+  success: "#15803D",
+  info: "#2563EB",
   // Fill behind a "muted"-tone Badge (see ui.tsx) — kept distinct from
   // `border` even though it's the same value here, because light mode
   // needs a genuinely different (much darker) fill for its white badge
