@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { nextNumber } from "@/lib/numbering";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
+import { parsePaginationParams, buildPage } from "@/lib/pagination";
 
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
@@ -12,14 +13,17 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const businessId = searchParams.get("businessId");
+  const { cursor, limit } = parsePaginationParams(searchParams, 100, 100);
 
-  const invoices = await prisma.invoice.findMany({
+  const rows = await prisma.invoice.findMany({
     where: businessId ? { businessId } : {},
-    orderBy: { generatedAt: "desc" },
+    orderBy: [{ generatedAt: "desc" }, { id: "desc" }],
     include: { business: { select: { name: true } } },
-    take: 100,
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
-  return Response.json({ invoices });
+  const { items, nextCursor } = buildPage(rows, limit);
+  return Response.json({ invoices: items, nextCursor });
 }
 
 const createSchema = z

@@ -1,115 +1,80 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { api, ApiError } from "../../api/client";
+import React, { useCallback, useMemo } from "react";
+import { FlatList, Text, View, StyleSheet } from "react-native";
+import { api } from "../../api/client";
 import { Driver, HoursReport } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
-import { presetRanges, formatRange, DateRange } from "../../lib/dateRange";
-import { downloadAndSharePdf } from "../../lib/downloadAndShare";
-import { useAuth } from "../../auth/AuthContext";
+import { formatRange, formatDate } from "../../lib/dateRange";
+import { useGeneratedDocument } from "../../lib/useGeneratedDocument";
 
 export function ReportsScreen() {
-  const { session } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [reports, setReports] = useState<HoursReport[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [driverId, setDriverId] = useState<string | null>(null);
-  const ranges = presetRanges();
-  const [range, setRange] = useState<DateRange>(ranges[1]);
-  const [error, setError] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [sharingId, setSharingId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const [driversRes, reportsRes] = await Promise.all([
-        api.get<{ drivers: Driver[] }>("/api/drivers"),
-        api.get<{ reports: HoursReport[] }>("/api/reports"),
-      ]);
-      setDrivers(driversRes.drivers.filter((d) => d.active));
-      setReports(reportsRes.reports);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not load reports");
-    } finally {
-      setInitialLoading(false);
-    }
+  const loadPickerOptions = useCallback(async () => {
+    const res = await api.get<{ drivers: Driver[] }>("/api/drivers");
+    return res.drivers.filter((d) => d.active).map((d) => ({ id: d.id, label: d.name }));
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
+  const loadItems = useCallback(async (cursor?: string) => {
+    const res = await api.get<{ reports: HoursReport[]; nextCursor: string | null }>(
+      `/api/reports${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`
+    );
+    return { items: res.reports, nextCursor: res.nextCursor };
+  }, []);
+  const generateDocument = useCallback(
+    (driverId: string, range: { start: Date; end: Date }) =>
+      api.post("/api/reports", { driverId, periodStart: range.start.toISOString(), periodEnd: range.end.toISOString() }),
+    []
   );
 
-  async function generate() {
-    setError(null);
-    if (!driverId) {
-      setError("Choose a driver");
-      return;
-    }
-    setGenerating(true);
-    try {
-      await api.post("/api/reports", {
-        driverId,
-        periodStart: range.start.toISOString(),
-        periodEnd: range.end.toISOString(),
-      });
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not generate report");
-    } finally {
-      setGenerating(false);
-    }
-  }
+  const doc = useGeneratedDocument<HoursReport>({
+    loadPickerOptions,
+    loadItems,
+    getItemId: (r) => r.id,
+    generateDocument,
+    pdfPath: (r) => `/api/reports/${r.id}/pdf`,
+    pdfFilename: (r) => `${r.reportNumber}.pdf`,
+    pickerMissingMessage: "Choose a driver",
+    loadErrorFallback: "Could not load reports",
+    generateErrorFallback: "Could not generate report",
+  });
 
-  async function share(report: HoursReport) {
-    if (!session) return;
-    setSharingId(report.id);
-    try {
-      await downloadAndSharePdf(`/api/reports/${report.id}/pdf`, session.token, `${report.reportNumber}.pdf`);
-    } catch {
-      Alert.alert("Could not open the PDF", "Check your connection and try again.");
-    } finally {
-      setSharingId(null);
-    }
-  }
-
-  if (initialLoading) return <CenteredSpinner />;
+  if (doc.initialLoading) return <CenteredSpinner />;
 
   return (
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
-      data={reports}
+      data={doc.items}
       keyExtractor={(r) => r.id}
       ListHeaderComponent={
         <View>
           <SectionTitle>Generate Hours Report</SectionTitle>
           <Card>
             <Label>Driver</Label>
-            <ChipSelect
-              options={drivers.map((d) => ({ id: d.id, label: d.name }))}
-              selectedId={driverId}
-              onSelect={setDriverId}
-            />
+            <ChipSelect options={doc.pickerOptions} selectedId={doc.pickerId} onSelect={doc.setPickerId} />
             <Label>Period</Label>
             <ChipSelect
-              options={ranges.map((r) => ({ id: r.label, label: `${r.label} (${formatRange(r)})` }))}
-              selectedId={range.label}
-              onSelect={(id) => setRange(ranges.find((r) => r.label === id) ?? ranges[0])}
+              options={doc.ranges.map((r) => ({ id: r.label, label: `${r.label} (${formatRange(r)})` }))}
+              selectedId={doc.range.label}
+              onSelect={(id) => doc.setRange(doc.ranges.find((r) => r.label === id) ?? doc.ranges[0])}
             />
-            <ErrorText>{error}</ErrorText>
-            <Button title="Generate Report" onPress={generate} loading={generating} />
+            <ErrorText>{doc.error}</ErrorText>
+            <Button title="Generate Report" onPress={doc.generate} loading={doc.generating} />
           </Card>
           <SectionTitle>Generated Reports</SectionTitle>
         </View>
       }
-      ListEmptyComponent={!error ? <Text style={styles.empty}>No reports generated yet.</Text> : null}
+      ListEmptyComponent={!doc.error ? <Text style={styles.empty}>No reports generated yet.</Text> : null}
+      ListFooterComponent={
+        doc.hasMore ? (
+          <View style={{ marginTop: spacing.sm }}>
+            <Button title="Load More" variant="secondary" onPress={doc.loadMore} loading={doc.loadingMore} />
+          </View>
+        ) : null
+      }
       renderItem={({ item }) => (
         <Card>
           <Text style={styles.number}>{item.reportNumber}</Text>
@@ -117,14 +82,14 @@ export function ReportsScreen() {
             {item.driver?.name} ({item.driver?.employeeCode})
           </Text>
           <Text style={styles.meta}>
-            {new Date(item.periodStart).toLocaleDateString("en-CA")} – {new Date(item.periodEnd).toLocaleDateString("en-CA")}
+            {formatDate(item.periodStart)} – {formatDate(item.periodEnd)}
           </Text>
           <View style={styles.statsRow}>
             <Text style={styles.hours}>{item.totalHours.toFixed(2)} hrs</Text>
             <Text style={styles.distance}>{item.totalDistanceKm.toFixed(1)} km</Text>
           </View>
           <View style={{ marginTop: spacing.sm }}>
-            <Button title="Share / Save PDF" variant="secondary" onPress={() => share(item)} loading={sharingId === item.id} />
+            <Button title="Share / Save PDF" variant="secondary" onPress={() => doc.share(item)} loading={doc.sharingId === item.id} />
           </View>
         </Card>
       )}

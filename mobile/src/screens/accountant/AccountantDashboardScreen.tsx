@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, ScrollView, Text, View, StyleSheet } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View, StyleSheet } from "react-native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../../auth/AuthContext";
 import { ChangePasswordCard } from "../../components/ChangePasswordCard";
@@ -26,24 +26,26 @@ export function AccountantDashboardScreen({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.md }}>
-      <Text style={styles.greeting}>Welcome, {session?.name}</Text>
-      <Text style={styles.company}>Giant Man Express &amp; Delivery — Ottawa</Text>
-      <Text style={styles.roleNote}>Accountant access — invoices, reports & client billing only</Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.md }}>
+        <Text style={styles.greeting}>Welcome, {session?.name}</Text>
+        <Text style={styles.company}>Giant Man Express &amp; Delivery — Ottawa</Text>
+        <Text style={styles.roleNote}>Accountant access — invoices, reports & client billing only</Text>
 
-      {ITEMS.map((item) => (
-        <Pressable key={item.key} style={styles.item} onPress={() => navigation.navigate(item.key as never)}>
-          <Text style={styles.itemTitle}>{item.title}</Text>
-          <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
-        </Pressable>
-      ))}
+        {ITEMS.map((item) => (
+          <Pressable key={item.key} style={styles.item} onPress={() => navigation.navigate(item.key as never)}>
+            <Text style={styles.itemTitle}>{item.title}</Text>
+            <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
+          </Pressable>
+        ))}
 
-      <View style={styles.group}>
-        <Text style={styles.groupTitle}>Account</Text>
-        <View style={styles.groupDivider} />
-        <ChangePasswordCard />
-      </View>
-    </ScrollView>
+        <View style={styles.group}>
+          <Text style={styles.groupTitle}>Account</Text>
+          <View style={styles.groupDivider} />
+          <ChangePasswordCard />
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

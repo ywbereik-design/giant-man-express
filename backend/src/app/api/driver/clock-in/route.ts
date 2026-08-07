@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireActiveDriver } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { IMAGE_DATA_URL_PATTERN, MAX_SELFIE_DATA_URL_LENGTH } from "@/lib/constants";
+import { hasValidImageMagicBytes } from "@/lib/imageValidation";
 
 const schema = z.object({
   lat: z.number().min(-90).max(90).optional(),
@@ -12,7 +13,8 @@ const schema = z.object({
   selfie: z
     .string()
     .regex(IMAGE_DATA_URL_PATTERN, "selfie must be a JPEG or PNG image data URL")
-    .max(MAX_SELFIE_DATA_URL_LENGTH, "Photo is too large"),
+    .max(MAX_SELFIE_DATA_URL_LENGTH, "Photo is too large")
+    .refine(hasValidImageMagicBytes, "selfie data does not match a valid image file"),
 });
 
 export async function POST(req: NextRequest) {

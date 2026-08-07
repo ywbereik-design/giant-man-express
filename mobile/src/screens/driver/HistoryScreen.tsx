@@ -3,10 +3,11 @@ import { RefreshControl, SectionList, Text, View, StyleSheet } from "react-nativ
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { TimeEntry } from "../../api/types";
-import { Card, CenteredSpinner, ErrorText } from "../../components/ui";
+import { Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
+import { formatDate, formatTime } from "../../lib/dateRange";
 
 function hoursBetween(a: string, b: string | null): string {
   if (!b) return "in progress";
@@ -20,11 +21,7 @@ function hoursBetween(a: string, b: string | null): string {
 function groupByDay(entries: TimeEntry[]): { title: string; data: TimeEntry[] }[] {
   const groups = new Map<string, TimeEntry[]>();
   for (const entry of entries) {
-    const day = new Date(entry.clockInAt).toLocaleDateString("en-CA", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+    const day = formatDate(entry.clockInAt, { weekday: "short", month: "short", day: "numeric" });
     const existing = groups.get(day);
     if (existing) existing.push(entry);
     else groups.set(day, [entry]);
@@ -40,11 +37,14 @@ export function HistoryScreen() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get<{ entries: TimeEntry[] }>("/api/driver/time-entries");
+      const res = await api.get<{ entries: TimeEntry[]; nextCursor: string | null }>("/api/driver/time-entries");
       setEntries(res.entries);
+      setNextCursor(res.nextCursor);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load history");
     } finally {
@@ -57,6 +57,22 @@ export function HistoryScreen() {
       load();
     }, [load])
   );
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await api.get<{ entries: TimeEntry[]; nextCursor: string | null }>(
+        `/api/driver/time-entries?cursor=${encodeURIComponent(nextCursor)}`
+      );
+      setEntries((prev) => [...prev, ...res.entries]);
+      setNextCursor(res.nextCursor);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not load more history");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const sections = useMemo(() => groupByDay(entries), [entries]);
 
@@ -71,11 +87,18 @@ export function HistoryScreen() {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={async () => { setLoading(true); await load(); setLoading(false); }} tintColor={colors.primary} />}
         ListHeaderComponent={<ErrorText>{error}</ErrorText>}
         ListEmptyComponent={!error ? <Text style={styles.empty}>No shifts recorded yet.</Text> : null}
+        ListFooterComponent={
+          nextCursor ? (
+            <View style={{ marginTop: spacing.sm }}>
+              <Button title="Load More" variant="secondary" onPress={loadMore} loading={loadingMore} />
+            </View>
+          ) : null
+        }
         renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
         renderItem={({ item }) => (
           <Card>
             <Text style={styles.times}>
-              {new Date(item.clockInAt).toLocaleTimeString("en-CA")} — {item.clockOutAt ? new Date(item.clockOutAt).toLocaleTimeString("en-CA") : "—"}
+              {formatTime(item.clockInAt)} — {item.clockOutAt ? formatTime(item.clockOutAt) : "—"}
             </Text>
             <Text style={styles.hours}>
               {hoursBetween(item.clockInAt, item.clockOutAt)} · {item.distanceKm.toFixed(1)} km

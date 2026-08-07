@@ -8,7 +8,8 @@ import { AddressRow } from "../../components/AddressRow";
 import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { SwipeToAccept } from "../../components/SwipeToAccept";
 import { submitJobStatus } from "../../lib/submitJobStatus";
-import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
+import { STATUS_TONE, hasReachedAnyStage } from "../../lib/jobStatus";
+import { JobStageBadges } from "../../components/JobStageBadges";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import type { DriverStackParamList } from "../../navigation/DriverNavigator";
@@ -26,7 +27,6 @@ export function JobDetailsScreen({ route, navigation }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
-  const reachedStages = STAGE_TIMESTAMPS.filter((s) => job[s.field]);
 
   async function handleAccept() {
     setError(null);
@@ -81,18 +81,10 @@ export function JobDetailsScreen({ route, navigation }: Props) {
           </Card>
         )}
 
-        {reachedStages.length > 0 && (
+        {hasReachedAnyStage(job) && (
           <Card>
             <Text style={styles.sectionTitle}>Progress</Text>
-            <View style={styles.stageRow}>
-              {reachedStages.map((s) => (
-                <Badge
-                  key={s.field}
-                  text={`${s.label} ${new Date(job[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
-                  tone="muted"
-                />
-              ))}
-            </View>
+            <JobStageBadges job={job} style={{ marginTop: 0 }} />
           </Card>
         )}
 
@@ -123,7 +115,6 @@ function makeStyles(colors: ThemeColors) {
     letterSpacing: 0.5,
     marginBottom: spacing.sm,
   },
-  stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   failureText: { color: colors.danger, fontSize: 14, fontWeight: "600", marginTop: spacing.sm },
   acceptBar: {
     padding: spacing.md,

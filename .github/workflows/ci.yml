@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: giant_man_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Fixed, non-secret placeholder values already committed as the
+      # documented local dev/test setup (see backend/tests/globalSetup.ts) —
+      # never used against a real database or a real JWT signing key.
+      - name: Write .env.test
+        run: |
+          echo 'DATABASE_URL="postgresql://postgres:postgres@localhost:5432/giant_man_test"' > .env.test
+          echo 'JWT_SECRET="test-only-secret-do-not-use-anywhere-real-0123456789"' >> .env.test
+      - run: npx prisma migrate deploy
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Text, View, StyleSheet, RefreshControl, ScrollView, AppState } from "react-native";
+import { KeyboardAvoidingView, Platform, Text, View, StyleSheet, RefreshControl, ScrollView, AppState } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { TimeEntry } from "../../api/types";
@@ -11,6 +11,7 @@ import { useTheme } from "../../theme/ThemeContext";
 import { isShiftTrackingActive, startShiftTracking, stopShiftTracking } from "../../location/shiftTracking";
 import { captureSelfie } from "../../lib/captureSelfie";
 import { getCoords } from "../../lib/getCoords";
+import { formatTime } from "../../lib/dateRange";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 
 interface StatusResponse {
@@ -154,47 +155,49 @@ export function HomeScreen() {
   const clockedIn = status?.clockedIn ?? false;
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: spacing.md, paddingTop: spacing.md + tabBarHeight }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-    >
-      <Text style={styles.greeting}>Hi, {session?.name}</Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: spacing.md, paddingTop: spacing.md + tabBarHeight }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
+        <Text style={styles.greeting}>Hi, {session?.name}</Text>
 
-      <Card>
-        <View style={styles.statusRow}>
-          <View style={[styles.dot, { backgroundColor: clockedIn ? colors.success : colors.textMuted }]} />
-          <Text style={styles.statusText}>{clockedIn ? "Clocked In" : "Clocked Out"}</Text>
+        <Card>
+          <View style={styles.statusRow}>
+            <View style={[styles.dot, { backgroundColor: clockedIn ? colors.success : colors.textMuted }]} />
+            <Text style={styles.statusText}>{clockedIn ? "Clocked In" : "Clocked Out"}</Text>
+          </View>
+          {clockedIn && status?.openEntry && (
+            <>
+              <Text style={styles.since}>
+                Since {formatTime(status.openEntry.clockInAt)}
+              </Text>
+              <Text style={styles.since}>
+                Distance this shift: {status.openEntry.distanceKm.toFixed(1)} km
+              </Text>
+            </>
+          )}
+
+          <ErrorText>{error}</ErrorText>
+          {notice && <Text style={styles.notice}>{notice}</Text>}
+
+          {clockedIn ? (
+            <Button title="Clock Out" variant="danger" onPress={handleClockOut} loading={busy} />
+          ) : (
+            <Button title="Clock In" onPress={handleClockIn} loading={busy} />
+          )}
+        </Card>
+
+        <Text style={styles.hint}>
+          Clocking in takes a quick selfie and tracks your location and mileage until you clock out.
+        </Text>
+
+        <View style={{ marginTop: spacing.lg }}>
+          <ChangePinCard />
         </View>
-        {clockedIn && status?.openEntry && (
-          <>
-            <Text style={styles.since}>
-              Since {new Date(status.openEntry.clockInAt).toLocaleTimeString("en-CA")}
-            </Text>
-            <Text style={styles.since}>
-              Distance this shift: {status.openEntry.distanceKm.toFixed(1)} km
-            </Text>
-          </>
-        )}
-
-        <ErrorText>{error}</ErrorText>
-        {notice && <Text style={styles.notice}>{notice}</Text>}
-
-        {clockedIn ? (
-          <Button title="Clock Out" variant="danger" onPress={handleClockOut} loading={busy} />
-        ) : (
-          <Button title="Clock In" onPress={handleClockIn} loading={busy} />
-        )}
-      </Card>
-
-      <Text style={styles.hint}>
-        Clocking in takes a quick selfie and tracks your location and mileage until you clock out.
-      </Text>
-
-      <View style={{ marginTop: spacing.lg }}>
-        <ChangePinCard />
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

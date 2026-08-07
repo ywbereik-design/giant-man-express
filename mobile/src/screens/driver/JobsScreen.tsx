@@ -13,7 +13,8 @@ import { DriverRouteMap } from "../../components/DriverRouteMap";
 import { routeDestination } from "../../lib/routeDestination";
 import { capturePhoto } from "../../lib/capturePhoto";
 import { getCoords } from "../../lib/getCoords";
-import { STATUS_TONE, STAGE_TIMESTAMPS } from "../../lib/jobStatus";
+import { STATUS_TONE } from "../../lib/jobStatus";
+import { JobStageBadges } from "../../components/JobStageBadges";
 import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { AddressRow } from "../../components/AddressRow";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
@@ -116,7 +117,6 @@ const JobCard = memo(function JobCard({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const action = NEXT_ACTION[item.status];
-  const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
   const destination = routeDestination(item);
   // A job with an update already queued offline is excluded from batch
   // selection — its local status is stale (the queue never optimistically
@@ -168,17 +168,7 @@ const JobCard = memo(function JobCard({
             Live map shown for your current stop only — tap an address above to navigate there instead.
           </Text>
         )}
-        {reachedStages.length > 0 && (
-          <View style={styles.stageRow}>
-            {reachedStages.map((s) => (
-              <Badge
-                key={s.field}
-                text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
-                tone="muted"
-              />
-            ))}
-          </View>
-        )}
+        <JobStageBadges job={item} />
         {item.status === "FAILED" && item.failureReason && <Text style={styles.failureText}>Failed: {item.failureReason}</Text>}
         {item.clientPhone && action && !selectionMode && <ClientContactButtons phone={item.clientPhone} />}
         {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
@@ -562,7 +552,6 @@ function makeStyles(colors: ThemeColors) {
   title: { color: colors.text, fontSize: 17, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl },
-  stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
   mapHint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.sm, fontStyle: "italic" },
   failureText: { color: colors.danger, fontSize: 13, fontWeight: "600", marginTop: spacing.xs },
   notice: { color: colors.primary, marginBottom: spacing.md, fontSize: 13 },

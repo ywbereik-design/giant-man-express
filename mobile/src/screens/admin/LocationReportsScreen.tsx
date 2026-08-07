@@ -7,6 +7,7 @@ import { Badge, Card, CenteredSpinner, ErrorText, SectionTitle } from "../../com
 import { DriverLiveMap } from "../../components/DriverLiveMap";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
+import { formatTime } from "../../lib/dateRange";
 
 export function LocationReportsScreen() {
   const { colors } = useTheme();
@@ -93,8 +94,8 @@ export function LocationReportsScreen() {
                     ) : (
                       detail.today.shifts.map((s) => (
                         <Text key={s.id} style={styles.meta}>
-                          {new Date(s.clockInAt).toLocaleTimeString("en-CA")} –{" "}
-                          {s.clockOutAt ? new Date(s.clockOutAt).toLocaleTimeString("en-CA") : "in progress"}
+                          {formatTime(s.clockInAt)} –{" "}
+                          {s.clockOutAt ? formatTime(s.clockOutAt) : "in progress"}
                           {"  ·  "}
                           {s.distanceKm.toFixed(1)} km
                         </Text>

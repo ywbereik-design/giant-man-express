@@ -21,6 +21,13 @@ export const STAGE_TIMESTAMPS: { field: keyof Job; label: string }[] = [
   { field: "deliveredAt", label: "Delivered" },
 ];
 
+// Whether a job has reached any stage worth showing a badge for — lets a
+// caller decide up front whether to render a wrapping section (e.g. a Card
+// titled "Progress") without needing the full filtered list itself.
+export function hasReachedAnyStage(job: Job): boolean {
+  return STAGE_TIMESTAMPS.some((s) => job[s.field]);
+}
+
 // GPS + server timestamp captured with a proof photo, formatted for the
 // PhotoThumbnail viewer's overlay caption — verification info shown
 // alongside the photo, not burned into it.

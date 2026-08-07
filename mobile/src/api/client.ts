@@ -24,7 +24,9 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
   onSessionExpired = handler;
 }
 
-const REQUEST_TIMEOUT_MS = 15000;
+// Exported so other network calls outside this client (e.g. downloadAndShare.ts's
+// PDF fetch) apply the same timeout instead of hanging forever on a stalled connection.
+export const REQUEST_TIMEOUT_MS = 15000;
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const hadToken = !!authToken;

@@ -80,4 +80,27 @@ describe("GET /api/jobs", () => {
     const body = await res.json();
     expect(Array.isArray(body.jobs)).toBe(true);
   });
+
+  it("pages through results with cursor+limit, covering every job exactly once", async () => {
+    const { staff } = await createStaff();
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    for (const title of ["Job A", "Job B", "Job C"]) {
+      const res = await createJobRoute(jsonRequest("/api/jobs", "POST", { title, jobTypeId: jobType.id, driverId: driver.id }, token));
+      expect(res.status).toBe(201);
+    }
+
+    const page1 = await (await listJobs(getRequest(`/api/jobs?driverId=${driver.id}&limit=2`, token))).json();
+    expect(page1.jobs).toHaveLength(2);
+    expect(page1.nextCursor).not.toBeNull();
+
+    const page2 = await (await listJobs(getRequest(`/api/jobs?driverId=${driver.id}&limit=2&cursor=${page1.nextCursor}`, token))).json();
+    expect(page2.jobs).toHaveLength(1);
+    expect(page2.nextCursor).toBeNull();
+
+    const allIds = [...page1.jobs, ...page2.jobs].map((j: { id: string }) => j.id);
+    expect(new Set(allIds).size).toBe(3);
+  });
 });

@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { nextNumber } from "@/lib/numbering";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
+import { parsePaginationParams, buildPage } from "@/lib/pagination";
 
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
@@ -12,14 +13,17 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const driverId = searchParams.get("driverId");
+  const { cursor, limit } = parsePaginationParams(searchParams, 100, 100);
 
-  const reports = await prisma.hoursReport.findMany({
+  const rows = await prisma.hoursReport.findMany({
     where: driverId ? { driverId } : {},
-    orderBy: { generatedAt: "desc" },
+    orderBy: [{ generatedAt: "desc" }, { id: "desc" }],
     include: { driver: { select: { name: true, employeeCode: true } } },
-    take: 100,
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
-  return Response.json({ reports });
+  const { items, nextCursor } = buildPage(rows, limit);
+  return Response.json({ reports: items, nextCursor });
 }
 
 const createSchema = z

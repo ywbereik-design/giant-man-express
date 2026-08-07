@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
@@ -8,7 +8,8 @@ import { ChipSelect } from "../../components/ChipSelect";
 import { AddressAutocompleteInput } from "../../components/AddressAutocompleteInput";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { AddressRow } from "../../components/AddressRow";
-import { STATUS_TONE, STAGE_TIMESTAMPS, photoCaption } from "../../lib/jobStatus";
+import { STATUS_TONE, photoCaption } from "../../lib/jobStatus";
+import { JobStageBadges } from "../../components/JobStageBadges";
 import { isValidPhone } from "../../lib/validation";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
@@ -36,14 +37,17 @@ const JobRow = memo(function JobRow({
   item,
   isCancelling,
   onCancel,
+  deletingPhotoType,
+  onDeletePhoto,
 }: {
   item: Job;
   isCancelling: boolean;
   onCancel: (job: Job) => void;
+  deletingPhotoType: "pickup" | "delivery" | null;
+  onDeletePhoto: (job: Job, type: "pickup" | "delivery") => void;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const reachedStages = STAGE_TIMESTAMPS.filter((s) => item[s.field]);
   return (
     <Card>
       <View style={styles.headerRow}>
@@ -61,17 +65,7 @@ const JobRow = memo(function JobRow({
           address={stop.address}
         />
       ))}
-      {reachedStages.length > 0 && (
-        <View style={styles.stageRow}>
-          {reachedStages.map((s) => (
-            <Badge
-              key={s.field}
-              text={`${s.label} ${new Date(item[s.field] as string).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" })}`}
-              tone="muted"
-            />
-          ))}
-        </View>
-      )}
+      <JobStageBadges job={item} />
       {item.status === "FAILED" && item.failureReason && (
         <Text style={styles.failureText}>Failed: {item.failureReason}</Text>
       )}
@@ -81,6 +75,12 @@ const JobRow = memo(function JobRow({
             <View style={styles.photoCol}>
               <Text style={styles.photoLabel}>Pickup</Text>
               <PhotoThumbnail uri={item.pickupPhoto} caption={photoCaption(item.pickupLat, item.pickupLng, item.pickedUpAt)} />
+              <Button
+                title="Delete"
+                variant="danger"
+                onPress={() => onDeletePhoto(item, "pickup")}
+                loading={deletingPhotoType === "pickup"}
+              />
             </View>
           )}
           {item.deliveryPhoto && (
@@ -89,6 +89,12 @@ const JobRow = memo(function JobRow({
               <PhotoThumbnail
                 uri={item.deliveryPhoto}
                 caption={photoCaption(item.deliveryLat, item.deliveryLng, item.deliveredAt)}
+              />
+              <Button
+                title="Delete"
+                variant="danger"
+                onPress={() => onDeletePhoto(item, "delivery")}
+                loading={deletingPhotoType === "delivery"}
               />
             </View>
           )}
@@ -124,16 +130,20 @@ export function AdminJobsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [deletingPhoto, setDeletingPhoto] = useState<{ jobId: string; type: "pickup" | "delivery" } | null>(null);
 
   const load = useCallback(async () => {
     try {
       const [jobsRes, driversRes, typesRes, businessesRes] = await Promise.all([
-        api.get<{ jobs: Job[] }>("/api/jobs"),
+        api.get<{ jobs: Job[]; nextCursor: string | null }>("/api/jobs"),
         api.get<{ drivers: Driver[] }>("/api/drivers"),
         api.get<{ jobTypes: JobType[] }>("/api/job-types"),
         api.get<{ businesses: Business[] }>("/api/businesses"),
       ]);
       setJobs(jobsRes.jobs);
+      setNextCursor(jobsRes.nextCursor);
       setDriverOptions(driversRes.drivers.filter((d) => d.active));
       setJobTypeOptions(typesRes.jobTypes.filter((t) => t.active));
       setBusinessOptions(businessesRes.businesses);
@@ -149,6 +159,22 @@ export function AdminJobsScreen() {
       load();
     }, [load])
   );
+
+  async function loadMoreJobs() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await api.get<{ jobs: Job[]; nextCursor: string | null }>(
+        `/api/jobs?cursor=${encodeURIComponent(nextCursor)}`
+      );
+      setJobs((prev) => [...prev, ...res.jobs]);
+      setNextCursor(res.nextCursor);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not load more jobs");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const visibleJobs = useMemo(() => {
     if (filter === "ALL") return jobs;
@@ -253,14 +279,48 @@ export function AdminJobsScreen() {
     [cancelJob]
   );
 
+  const deletePhoto = useCallback(async (job: Job, type: "pickup" | "delivery") => {
+    setDeletingPhoto({ jobId: job.id, type });
+    setError(null);
+    try {
+      await api.delete(`/api/jobs/${job.id}/photo?type=${type}`);
+      setJobs((prev) =>
+        prev.map((j) => (j.id === job.id ? { ...j, [type === "pickup" ? "pickupPhoto" : "deliveryPhoto"]: null } : j))
+      );
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not delete photo");
+    } finally {
+      setDeletingPhoto(null);
+    }
+  }, []);
+
+  const confirmDeletePhoto = useCallback(
+    (job: Job, type: "pickup" | "delivery") => {
+      Alert.alert(`Delete this ${type} photo?`, "The job's status and timestamps stay — only the photo is removed. This can't be undone.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => deletePhoto(job, type) },
+      ]);
+    },
+    [deletePhoto]
+  );
+
   const renderItem = useCallback(
-    ({ item }: { item: Job }) => <JobRow item={item} isCancelling={cancellingId === item.id} onCancel={confirmCancelJob} />,
-    [cancellingId, confirmCancelJob]
+    ({ item }: { item: Job }) => (
+      <JobRow
+        item={item}
+        isCancelling={cancellingId === item.id}
+        onCancel={confirmCancelJob}
+        deletingPhotoType={deletingPhoto?.jobId === item.id ? deletingPhoto.type : null}
+        onDeletePhoto={confirmDeletePhoto}
+      />
+    ),
+    [cancellingId, confirmCancelJob, deletingPhoto, confirmDeletePhoto]
   );
 
   if (initialLoading) return <CenteredSpinner />;
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
@@ -340,8 +400,16 @@ export function AdminJobsScreen() {
         </View>
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No jobs in this view.</Text> : null}
+      ListFooterComponent={
+        nextCursor ? (
+          <View style={{ marginTop: spacing.sm }}>
+            <Button title="Load More" variant="secondary" onPress={loadMoreJobs} loading={loadingMore} />
+          </View>
+        ) : null
+      }
       renderItem={renderItem}
     />
+    </KeyboardAvoidingView>
   );
 }
 
@@ -359,6 +427,5 @@ function makeStyles(colors: ThemeColors) {
   photoCol: { alignItems: "flex-start" },
   photoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "700", marginBottom: 4 },
   divider: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: spacing.lg, marginBottom: spacing.md },
-  stageRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.sm },
   });
 }

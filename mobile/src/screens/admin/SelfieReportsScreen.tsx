@@ -1,13 +1,14 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver, TimeEntry } from "../../api/types";
-import { Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
+import { Button, Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
+import { formatDate, formatTime } from "../../lib/dateRange";
 
 export function SelfieReportsScreen() {
   const { colors } = useTheme();
@@ -18,6 +19,9 @@ export function SelfieReportsScreen() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadDrivers = useCallback(async () => {
     try {
@@ -41,13 +45,50 @@ export function SelfieReportsScreen() {
     setError(null);
     setEntriesLoading(true);
     try {
-      const res = await api.get<{ entries: TimeEntry[] }>(`/api/drivers/${id}/time-entries`);
+      const res = await api.get<{ entries: TimeEntry[]; nextCursor: string | null }>(`/api/drivers/${id}/time-entries`);
       setEntries(res.entries);
+      setNextCursor(res.nextCursor);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load selfie history");
     } finally {
       setEntriesLoading(false);
     }
+  }
+
+  async function loadMore() {
+    if (!driverId || !nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await api.get<{ entries: TimeEntry[]; nextCursor: string | null }>(
+        `/api/drivers/${driverId}/time-entries?cursor=${encodeURIComponent(nextCursor)}`
+      );
+      setEntries((prev) => [...prev, ...res.entries]);
+      setNextCursor(res.nextCursor);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not load more selfie history");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function deletePhoto(entry: TimeEntry) {
+    setDeletingId(entry.id);
+    setError(null);
+    try {
+      await api.delete(`/api/drivers/time-entries/${entry.id}/photo`);
+      setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, clockInPhoto: null } : e)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not delete photo");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function confirmDeletePhoto(entry: TimeEntry) {
+    Alert.alert("Delete this selfie?", "The clock-in record stays — only the photo is removed. This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => deletePhoto(entry) },
+    ]);
   }
 
   if (initialLoading) return <CenteredSpinner />;
@@ -81,6 +122,13 @@ export function SelfieReportsScreen() {
           <Text style={styles.empty}>Choose a driver to see their selfie history.</Text>
         ) : null
       }
+      ListFooterComponent={
+        nextCursor ? (
+          <View style={{ marginTop: spacing.sm }}>
+            <Button title="Load More" variant="secondary" onPress={loadMore} loading={loadingMore} />
+          </View>
+        ) : null
+      }
       renderItem={({ item }) => (
         <Card>
           <View style={styles.row}>
@@ -93,18 +141,24 @@ export function SelfieReportsScreen() {
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.date}>
-                {new Date(item.clockInAt).toLocaleDateString("en-CA", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
+                {formatDate(item.clockInAt, { weekday: "short", month: "short", day: "numeric" })}
               </Text>
               <Text style={styles.meta}>
-                Clocked in {new Date(item.clockInAt).toLocaleTimeString("en-CA")}
-                {item.clockOutAt ? ` – out ${new Date(item.clockOutAt).toLocaleTimeString("en-CA")}` : " (in progress)"}
+                Clocked in {formatTime(item.clockInAt)}
+                {item.clockOutAt ? ` – out ${formatTime(item.clockOutAt)}` : " (in progress)"}
               </Text>
             </View>
           </View>
+          {item.clockInPhoto && (
+            <View style={{ marginTop: spacing.sm }}>
+              <Button
+                title="Delete Photo"
+                variant="danger"
+                onPress={() => confirmDeletePhoto(item)}
+                loading={deletingId === item.id}
+              />
+            </View>
+          )}
         </Card>
       )}
     />

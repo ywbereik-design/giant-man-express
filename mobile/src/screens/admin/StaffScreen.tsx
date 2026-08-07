@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { StaffAccount, StaffRole } from "../../api/types";
@@ -305,6 +305,7 @@ export function StaffScreen() {
   if (initialLoading) return <CenteredSpinner />;
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
@@ -331,6 +332,7 @@ export function StaffScreen() {
       ListEmptyComponent={!error ? <Text style={styles.empty}>No staff accounts yet.</Text> : null}
       renderItem={renderItem}
     />
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, Text, View, StyleSheet } from "react-native";
+import { FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business } from "../../api/types";
@@ -155,6 +155,7 @@ export function BusinessesScreen() {
   if (initialLoading) return <CenteredSpinner />;
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
@@ -221,6 +222,7 @@ export function BusinessesScreen() {
         );
       }}
     />
+    </KeyboardAvoidingView>
   );
 }
 

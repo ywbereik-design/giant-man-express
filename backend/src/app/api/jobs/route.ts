@@ -6,6 +6,7 @@ import { parseBody, isError } from "@/lib/api";
 import { JOB_STATUSES, MAX_DROPOFF_STOPS, MAX_JOB_NOTES_LENGTH, MAX_JOB_TEXT_LENGTH, PHONE_PATTERN } from "@/lib/constants";
 import { safeDriverSelect } from "@/lib/select";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
+import { parsePaginationParams, buildPage } from "@/lib/pagination";
 
 const JOB_INCLUDE = {
   jobType: true,
@@ -23,20 +24,20 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const driverId = searchParams.get("driverId");
+  const { cursor, limit } = parsePaginationParams(searchParams, 200, 200);
 
-  const jobs = await prisma.job.findMany({
+  const rows = await prisma.job.findMany({
     where: {
       ...(status && (JOB_STATUSES as readonly string[]).includes(status) ? { status } : {}),
       ...(driverId ? { driverId } : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: JOB_INCLUDE,
-    // Bounded so this list doesn't grow unboundedly (with full photo data
-    // URLs on every row) as the business accumulates job history — the admin
-    // UI's default "Active" filter only needs recent/in-flight jobs anyway.
-    take: 200,
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
-  return Response.json({ jobs });
+  const { items, nextCursor } = buildPage(rows, limit);
+  return Response.json({ jobs: items, nextCursor });
 }
 
 const createSchema = z.object({

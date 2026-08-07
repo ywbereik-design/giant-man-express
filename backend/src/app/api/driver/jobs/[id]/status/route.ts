@@ -10,6 +10,7 @@ import {
   JobStatus,
   MAX_SELFIE_DATA_URL_LENGTH,
 } from "@/lib/constants";
+import { hasValidImageMagicBytes } from "@/lib/imageValidation";
 
 const schema = z.object({
   status: z.enum(["ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY", "DELIVERED", "FAILED"]),
@@ -17,6 +18,7 @@ const schema = z.object({
     .string()
     .regex(IMAGE_DATA_URL_PATTERN, "photo must be a JPEG or PNG image data URL")
     .max(MAX_SELFIE_DATA_URL_LENGTH, "Photo is too large")
+    .refine(hasValidImageMagicBytes, "photo data does not match a valid image file")
     .optional(),
   // Device GPS at the moment the photo above was captured — only meaningful
   // alongside a PICKED_UP/DELIVERED photo, ignored otherwise.

@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo, useState } from "react";
-import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Driver } from "../../api/types";
@@ -7,6 +7,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { isValidPhone } from "../../lib/validation";
+import { formatTime } from "../../lib/dateRange";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
@@ -111,7 +112,7 @@ const DriverRow = memo(function DriverRow({
         <Text style={styles.meta}>
           Today: {(item.todayDistanceKm ?? 0).toFixed(1)} km
           {item.clockedIn && item.currentLocationAt
-            ? ` · last seen ${new Date(item.currentLocationAt).toLocaleTimeString("en-CA")}`
+            ? ` · last seen ${formatTime(item.currentLocationAt)}`
             : item.clockedIn
               ? " · waiting for first location ping"
               : ""}
@@ -120,7 +121,7 @@ const DriverRow = memo(function DriverRow({
       {item.clockedIn && item.clockInPhoto && (
         <View style={styles.photoRow}>
           <PhotoThumbnail uri={item.clockInPhoto} size={44} />
-          <Text style={styles.meta}>Clocked in {item.clockInAt ? new Date(item.clockInAt).toLocaleTimeString("en-CA") : ""}</Text>
+          <Text style={styles.meta}>Clocked in {item.clockInAt ? formatTime(item.clockInAt) : ""}</Text>
         </View>
       )}
       {item.clockedIn && !item.clockInPhoto && item.clockInPhotoExpired && (
@@ -323,6 +324,7 @@ export function DriversScreen() {
   if (initialLoading) return <CenteredSpinner />;
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <FlatList
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md }}
@@ -353,6 +355,7 @@ export function DriversScreen() {
       ListEmptyComponent={!error ? <Text style={styles.empty}>No drivers yet.</Text> : null}
       renderItem={renderItem}
     />
+    </KeyboardAvoidingView>
   );
 }
 
