@@ -15,6 +15,28 @@ const MAP_HEIGHT_FRACTION = 0.32;
 
 const LEAFLET_VERSION = "1.9.4";
 
+// A safe, non-ocean placeholder for the map's initial view before any real
+// position has arrived — downtown Ottawa, where this app's whole business
+// operates. Avoids the classic "blank light-blue box" symptom of a map
+// stuck centered on [0, 0] ("Null Island", open Atlantic ocean).
+const FALLBACK_CENTER: LatLng = { latitude: 45.4215, longitude: -75.6972 };
+
+// (0, 0) is real open ocean, not a legitimate pickup/dropoff for an
+// Ottawa-based courier service — far more likely to be an uninitialized
+// GPS reading (a device/emulator with no location fix yet) than an actual
+// destination, so it's treated as invalid alongside NaN/out-of-range values
+// rather than plotted as if it were real.
+function isValidLatLng(point: LatLng | null | undefined): point is LatLng {
+  return (
+    !!point &&
+    Number.isFinite(point.latitude) &&
+    Number.isFinite(point.longitude) &&
+    Math.abs(point.latitude) <= 90 &&
+    Math.abs(point.longitude) <= 180 &&
+    !(point.latitude === 0 && point.longitude === 0)
+  );
+}
+
 export interface LiveRouteMapProps {
   origin: LatLng;
   // Omitted for DriverLiveMap's "no active job" case — just shows the
@@ -71,10 +93,12 @@ export function LiveRouteMap({
   // same responsibility MapViewDirections used to own internally for the
   // Google version. Cleared immediately (not just on the new fetch
   // resolving) so a destination change never briefly shows a route line
-  // pointing at the OLD destination while the new one loads.
+  // pointing at the OLD destination while the new one loads. Skipped
+  // entirely for an invalid origin/destination (see isValidLatLng) rather
+  // than sending OSRM garbage coordinates and drawing whatever it hands back.
   useEffect(() => {
     setRouteCoords(null);
-    if (!destination) return;
+    if (!destination || !isValidLatLng(origin) || !isValidLatLng(destination)) return;
     let cancelled = false;
     fetchRoute(origin, destination).then((result) => {
       if (cancelled) return;
@@ -91,10 +115,15 @@ export function LiveRouteMap({
 
   function pushUpdate() {
     if (!mapReady.current) return;
-    const destLat = destination ? destination.latitude : 0;
-    const destLng = destination ? destination.longitude : 0;
-    const routeArg = routeCoords ? JSON.stringify(routeCoords.map((c) => [c.latitude, c.longitude])) : "null";
-    const script = `updateMap(${origin.latitude}, ${origin.longitude}, ${destination ? 1 : 0}, ${destLat}, ${destLng}, ${JSON.stringify(
+    // No usable origin yet — leave the map showing its last good state (or
+    // the FALLBACK_CENTER it booted with) instead of jumping to whatever
+    // placeholder value origin currently holds.
+    if (!isValidLatLng(origin)) return;
+    const validDestination = destination && isValidLatLng(destination) ? destination : null;
+    const destLat = validDestination ? validDestination.latitude : 0;
+    const destLng = validDestination ? validDestination.longitude : 0;
+    const routeArg = validDestination && routeCoords ? JSON.stringify(routeCoords.map((c) => [c.latitude, c.longitude])) : "null";
+    const script = `updateMap(${origin.latitude}, ${origin.longitude}, ${validDestination ? 1 : 0}, ${destLat}, ${destLng}, ${JSON.stringify(
       destinationLabel
     )}, ${JSON.stringify(originTitle)}, ${routeArg}); true;`;
     webviewRef.current?.injectJavaScript(script);
@@ -151,7 +180,12 @@ function buildMapHtml(colors: ThemeColors): string {
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.js"></script>
 <script>
-  var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([0, 0], 13);
+  // Boots centered on ${FALLBACK_CENTER.latitude}, ${FALLBACK_CENTER.longitude}
+  // (downtown Ottawa) rather than [0, 0] — a map stuck on its initial view
+  // (before the first real updateMap() call, or after one that got
+  // rejected as invalid below) should never show open ocean.
+  var map = L.map('map', { zoomControl: false, attributionControl: false })
+    .setView([${FALLBACK_CENTER.latitude}, ${FALLBACK_CENTER.longitude}], 11);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
@@ -194,7 +228,25 @@ function buildMapHtml(colors: ThemeColors): string {
   var routeCasing = null;
   var routeLine = null;
 
+  // Belt-and-suspenders alongside the RN-side isValidLatLng check in
+  // LiveRouteMap.tsx — (0, 0) or a NaN/out-of-range pair should never reach
+  // the map's bounds calculation, since a single bad point can drag
+  // fitBounds into zooming out across the ocean to include it.
+  function isUsable(lat, lng) {
+    return (
+      typeof lat === 'number' && typeof lng === 'number' &&
+      isFinite(lat) && isFinite(lng) &&
+      Math.abs(lat) <= 90 && Math.abs(lng) <= 180 &&
+      !(lat === 0 && lng === 0)
+    );
+  }
+
   function updateMap(originLat, originLng, hasDest, destLat, destLng, destLabel, originLabel, routeCoords) {
+    // No usable origin — leave the map exactly as it is (its last good
+    // position, or the FALLBACK_CENTER it booted with) rather than jumping
+    // to an invalid point.
+    if (!isUsable(originLat, originLng)) return;
+
     var originLatLng = [originLat, originLng];
     if (!originMarker) {
       originMarker = L.marker(originLatLng, { icon: originIcon }).addTo(map);
@@ -204,8 +256,9 @@ function buildMapHtml(colors: ThemeColors): string {
     originMarker.bindPopup(originLabel);
 
     var bounds = [originLatLng];
+    var destUsable = hasDest && isUsable(destLat, destLng);
 
-    if (hasDest) {
+    if (destUsable) {
       var destLatLng = [destLat, destLng];
       if (!destMarker) {
         destMarker = L.marker(destLatLng, { icon: destIcon }).addTo(map);
@@ -227,7 +280,12 @@ function buildMapHtml(colors: ThemeColors): string {
       map.removeLayer(routeLine);
       routeLine = null;
     }
-    if (routeCoords && routeCoords.length > 1) {
+    var routeUsable =
+      destUsable &&
+      routeCoords &&
+      routeCoords.length > 1 &&
+      routeCoords.every(function (p) { return isUsable(p[0], p[1]); });
+    if (routeUsable) {
       routeCasing = L.polyline(routeCoords, {
         color: '#ffffff',
         weight: 9,
@@ -252,8 +310,15 @@ function buildMapHtml(colors: ThemeColors): string {
     originMarker.bringToFront();
     if (destMarker) destMarker.bringToFront();
 
+    // maxZoom caps how far fitBounds will zoom IN for two very close
+    // points (e.g. pickup and dropoff a block apart) — without it, Leaflet
+    // can zoom in past street level into a blank tile. It has no effect on
+    // zooming OUT; that's instead prevented above by never letting an
+    // invalid (e.g. (0, 0)) point into the bounds array in the first
+    // place, which is what previously made the map zoom out across the
+    // ocean to fit it.
     if (bounds.length > 1) {
-      map.fitBounds(bounds, { padding: [48, 48] });
+      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
     } else {
       map.setView(bounds[0], 15);
     }
