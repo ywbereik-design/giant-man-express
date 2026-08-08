@@ -72,11 +72,18 @@ const DriverRow = memo(function DriverRow({
     return (
       <Card>
         <Label>Full Name</Label>
-        <FieldInput value={editName} onChangeText={onEditNameChange} />
+        <FieldInput value={editName} onChangeText={onEditNameChange} accessibilityLabel="Full Name" />
         <Label>Phone (optional)</Label>
-        <FieldInput value={editPhone} onChangeText={onEditPhoneChange} keyboardType="phone-pad" />
+        <FieldInput value={editPhone} onChangeText={onEditPhoneChange} keyboardType="phone-pad" accessibilityLabel="Phone" />
         <Label>Reset PIN (optional — leave blank to keep current)</Label>
-        <FieldInput value={editPin} onChangeText={onEditPinChange} keyboardType="number-pad" secureTextEntry placeholder="New 4+ digit PIN" />
+        <FieldInput
+          value={editPin}
+          onChangeText={onEditPinChange}
+          keyboardType="number-pad"
+          secureTextEntry
+          placeholder="New 4-8 digit PIN"
+          accessibilityLabel="Reset PIN"
+        />
         <ErrorText>{editError}</ErrorText>
         <Button title="Save Changes" onPress={() => onSaveEdit(item)} loading={editSaving} />
         <Button title="Cancel" variant="secondary" onPress={onCancelEdit} />
@@ -399,7 +406,7 @@ export function DriversScreen() {
               <FieldInput value={name} onChangeText={setName} placeholder="Jasdeep Singh" />
               <Label>Employee Code</Label>
               <FieldInput value={employeeCode} onChangeText={setEmployeeCode} autoCapitalize="characters" placeholder="D001" />
-              <Label>PIN (4+ digits)</Label>
+              <Label>PIN (4-8 digits)</Label>
               <FieldInput value={pin} onChangeText={setPin} keyboardType="number-pad" secureTextEntry placeholder="1234" />
               <Label>Phone (optional)</Label>
               <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />

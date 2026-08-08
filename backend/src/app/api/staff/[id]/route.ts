@@ -80,7 +80,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
             ...rest,
             ...(role ? { role } : {}),
             ...(active !== undefined ? { active } : {}),
-            ...(passwordHash ? { passwordHash } : {}),
+            // Matches the self-service /api/account/password route — an
+            // admin-driven reset is often done *because* a device/token was
+            // compromised, so the old token (a stolen copy included) must
+            // stop working immediately rather than staying valid for up to
+            // 30 more days. Role/active changes don't need this: requireRole
+            // already re-checks both fresh from the DB on every request,
+            // independent of tokenVersion.
+            ...(passwordHash ? { passwordHash, tokenVersion: { increment: 1 } } : {}),
           },
           select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
         });

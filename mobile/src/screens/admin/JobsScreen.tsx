@@ -271,7 +271,7 @@ export function AdminJobsScreen() {
     }
     setSaving(true);
     try {
-      await api.post("/api/jobs", {
+      const res = await api.post<{ job: Job }>("/api/jobs", {
         title: title.trim(),
         jobTypeId,
         driverId,
@@ -289,7 +289,11 @@ export function AdminJobsScreen() {
       setDropoffAddresses([""]);
       setClientPhone("");
       setNotes("");
-      await load();
+      // Prepend locally instead of calling load() — GET /api/jobs orders
+      // newest-first, so this matches server order exactly, and unlike a
+      // full reload it doesn't discard any additional pages already pulled
+      // in via "Load More".
+      setJobs((prev) => [res.job, ...prev]);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not create job");
     } finally {
@@ -297,21 +301,21 @@ export function AdminJobsScreen() {
     }
   }
 
-  const cancelJob = useCallback(
-    async (job: Job) => {
-      setCancellingId(job.id);
-      setError(null);
-      try {
-        await api.patch(`/api/jobs/${job.id}`, { status: "CANCELLED" });
-        await load();
-      } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Could not cancel job");
-      } finally {
-        setCancellingId(null);
-      }
-    },
-    [load]
-  );
+  const cancelJob = useCallback(async (job: Job) => {
+    setCancellingId(job.id);
+    setError(null);
+    try {
+      const res = await api.patch<{ job: Job }>(`/api/jobs/${job.id}`, { status: "CANCELLED" });
+      // Patch this one row locally instead of calling load() — a full
+      // reload re-fetches only the first page, silently dropping any extra
+      // pages already pulled in via "Load More".
+      setJobs((prev) => prev.map((j) => (j.id === res.job.id ? res.job : j)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not cancel job");
+    } finally {
+      setCancellingId(null);
+    }
+  }, []);
 
   const confirmCancelJob = useCallback(
     (job: Job) => {

@@ -44,7 +44,11 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    // minHeight (not just paddingVertical) so the tappable area meets the
+    // ~44px minimum recommended touch target regardless of the label's
+    // rendered text height.
+    minHeight: 44,
+    justifyContent: "center",
     borderRadius: 999,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,

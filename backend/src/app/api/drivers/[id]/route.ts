@@ -31,7 +31,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const result = await runOrRespond(() =>
     prisma.driver.update({
       where: { id: params.id },
-      data: { ...rest, ...(pinHash ? { pinHash } : {}) },
+      // Matches /api/account/pin's self-service reset — bumping tokenVersion
+      // on an admin-driven PIN reset means an old (possibly compromised)
+      // token stops authenticating immediately instead of staying valid for
+      // up to 30 more days.
+      data: { ...rest, ...(pinHash ? { pinHash, tokenVersion: { increment: 1 } } : {}) },
       select: { id: true, name: true, employeeCode: true, phone: true, active: true },
     })
   );

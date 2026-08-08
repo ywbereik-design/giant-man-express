@@ -88,6 +88,9 @@ export function LoginScreen() {
                 key={m.id}
                 style={[styles.toggleBtn, mode === m.id && styles.toggleBtnActive]}
                 onPress={() => switchMode(m.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mode === m.id }}
+                accessibilityLabel={`${m.label}. ${m.subtitle}`}
               >
                 <Text style={[styles.toggleText, mode === m.id && styles.toggleTextActive]}>{m.label}</Text>
               </Pressable>
@@ -156,7 +159,7 @@ function makeStyles(colors: ThemeColors) {
     padding: 4,
     marginBottom: spacing.sm,
   },
-  toggleBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center" },
+  toggleBtn: { flex: 1, minHeight: 44, justifyContent: "center", borderRadius: 8, alignItems: "center" },
   toggleBtnActive: { backgroundColor: colors.primary },
   toggleText: { color: colors.textMuted, fontWeight: "600" },
   toggleTextActive: { color: colors.primaryText },

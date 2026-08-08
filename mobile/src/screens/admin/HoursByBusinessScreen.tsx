@@ -1,13 +1,34 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
-import { Business, Driver, HoursByBusinessRow } from "../../api/types";
+import { Business, Driver, HoursByBusinessRow as HoursByBusinessRowData } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { presetRanges, formatRange, DateRange } from "../../lib/dateRange";
+
+// Memoized so typing/re-querying the picker form above doesn't re-render
+// every already-loaded row — mirrors the DriverRow pattern in
+// DriversScreen.tsx. No per-row callbacks here (this list is read-only), so
+// unlike ReportRow/InvoiceRow there's nothing else to stabilize.
+const HoursByBusinessRow = memo(function HoursByBusinessRow({ item }: { item: HoursByBusinessRowData }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Card>
+      <Text style={styles.business}>{item.businessName}</Text>
+      <Text style={styles.meta}>{item.driverName}</Text>
+      <View style={styles.statsRow}>
+        <Text style={styles.hours}>{item.totalHours.toFixed(2)} hrs</Text>
+        <Text style={styles.jobCount}>
+          {item.jobCount} job{item.jobCount === 1 ? "" : "s"}
+        </Text>
+      </View>
+    </Card>
+  );
+});
 
 // Live, read-only view of hours worked per client — a billing *reference*
 // derived from each job's own pickedUpAt->deliveredAt window, not a
@@ -22,7 +43,7 @@ export function HoursByBusinessScreen() {
   const [driverId, setDriverId] = useState<string | null>(null);
   const ranges = presetRanges();
   const [range, setRange] = useState<DateRange>(ranges[1]);
-  const [rows, setRows] = useState<HoursByBusinessRow[]>([]);
+  const [rows, setRows] = useState<HoursByBusinessRowData[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +79,7 @@ export function HoursByBusinessScreen() {
       });
       if (businessId) params.set("businessId", businessId);
       if (driverId) params.set("driverId", driverId);
-      const res = await api.get<{ rows: HoursByBusinessRow[] }>(`/api/reports/hours-by-business?${params}`);
+      const res = await api.get<{ rows: HoursByBusinessRowData[] }>(`/api/reports/hours-by-business?${params}`);
       setRows(res.rows);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load hours by client");
@@ -66,6 +87,8 @@ export function HoursByBusinessScreen() {
       setLoading(false);
     }
   }
+
+  const renderItem = useCallback(({ item }: { item: HoursByBusinessRowData }) => <HoursByBusinessRow item={item} />, []);
 
   if (initialLoading) return <CenteredSpinner />;
 
@@ -107,16 +130,7 @@ export function HoursByBusinessScreen() {
         </View>
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No results — choose a period and load hours.</Text> : null}
-      renderItem={({ item }) => (
-        <Card>
-          <Text style={styles.business}>{item.businessName}</Text>
-          <Text style={styles.meta}>{item.driverName}</Text>
-          <View style={styles.statsRow}>
-            <Text style={styles.hours}>{item.totalHours.toFixed(2)} hrs</Text>
-            <Text style={styles.jobCount}>{item.jobCount} job{item.jobCount === 1 ? "" : "s"}</Text>
-          </View>
-        </Card>
-      )}
+      renderItem={renderItem}
     />
   );
 }

@@ -11,10 +11,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// StaffUser.role is one of: ADMIN | DISPATCH
+// StaffUser.role is one of: ADMIN | DISPATCH | ACCOUNTANT
 // ADMIN — full system access: settings, drivers, businesses, reports, invoices.
 // DISPATCH — can view/assign jobs and monitor drivers, but no financial or
 // account-management access (no reports, invoices, driver/business editing).
+// ACCOUNTANT — read-only access to billing data: reports, invoices, and a
+// read-only driver/business picker for generating them, but no job/driver
+// management and no live location or clock-in-photo access.
 model StaffUser {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -151,6 +154,13 @@ model Job {
   @@index([businessId])
   @@index([jobTypeId])
   @@index([status])
+  // Matches the exact where-clause shape of /api/invoices and
+  // /api/reports/hours-by-business (businessId/driverId + status:"DELIVERED"
+  // + deliveredAt range) — without these, that billing-period scan falls
+  // back to the single-column businessId/driverId index above and then
+  // filters status/deliveredAt row-by-row.
+  @@index([businessId, status, deliveredAt])
+  @@index([driverId, status, deliveredAt])
 }
 
 // A single delivery location on a job — a job has exactly one pickup
@@ -239,8 +249,10 @@ model HoursReport {
   @@index([driverId])
 }
 
-// Invoice.status is one of: DRAFT | FINAL
-
+// Invoice.status always holds "FINAL" today — every invoice is generated
+// complete in one step (see POST /api/invoices), there's no draft/edit flow
+// that would ever produce another value. Kept as a plain string rather than
+// removed since it's already a stored, API-exposed field.
 model Invoice {
   id            String   @id @default(cuid())
   invoiceNumber String   @unique

@@ -33,7 +33,12 @@ export function JobDetailsScreen({ route, navigation }: Props) {
     try {
       const result = await submitJobStatus(job.id, "ACCEPTED");
       if (!result.sent) {
+        // Stay on this screen instead of navigating back immediately — the
+        // previous behavior called goBack() right after setting this notice,
+        // so it was never actually visible before the screen unmounted. The
+        // driver can back out manually once they've read it.
         setError("You're offline — this will sync automatically once you're back online.");
+        return;
       }
       navigation.goBack();
     } catch (e) {

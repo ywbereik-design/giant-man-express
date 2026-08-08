@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { api } from "../../api/client";
 import { Business, Invoice } from "../../api/types";
@@ -8,6 +8,37 @@ import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { formatRange, formatDate } from "../../lib/dateRange";
 import { useGeneratedDocument } from "../../lib/useGeneratedDocument";
+
+// Memoized so typing in the "Generate Invoice" form above doesn't re-render
+// every already-generated invoice card — mirrors the DriverRow pattern in
+// DriversScreen.tsx. Only effective because doc.share is itself
+// useCallback-wrapped in useGeneratedDocument.ts; otherwise this row's
+// onShare prop would get a new identity every render regardless.
+const InvoiceRow = memo(function InvoiceRow({
+  item,
+  isSharing,
+  onShare,
+}: {
+  item: Invoice;
+  isSharing: boolean;
+  onShare: (item: Invoice) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Card>
+      <Text style={styles.number}>{item.invoiceNumber}</Text>
+      <Text style={styles.meta}>{item.business?.name}</Text>
+      <Text style={styles.meta}>
+        {formatDate(item.periodStart)} – {formatDate(item.periodEnd)}
+      </Text>
+      <Text style={styles.amount}>${item.totalAmount.toFixed(2)}</Text>
+      <View style={{ marginTop: spacing.sm }}>
+        <Button title="Share / Save PDF" variant="secondary" onPress={() => onShare(item)} loading={isSharing} />
+      </View>
+    </Card>
+  );
+});
 
 export function InvoicesScreen() {
   const { colors } = useTheme();
@@ -24,22 +55,38 @@ export function InvoicesScreen() {
     return { items: res.invoices, nextCursor: res.nextCursor };
   }, []);
   const generateDocument = useCallback(
-    (businessId: string, range: { start: Date; end: Date }) =>
-      api.post("/api/invoices", { businessId, periodStart: range.start.toISOString(), periodEnd: range.end.toISOString() }),
+    async (businessId: string, range: { start: Date; end: Date }) => {
+      const res = await api.post<{ invoice: Invoice }>("/api/invoices", {
+        businessId,
+        periodStart: range.start.toISOString(),
+        periodEnd: range.end.toISOString(),
+      });
+      return res.invoice;
+    },
     []
   );
+  const getItemId = useCallback((i: Invoice) => i.id, []);
+  const pdfPath = useCallback((i: Invoice) => `/api/invoices/${i.id}/pdf`, []);
+  const pdfFilename = useCallback((i: Invoice) => `${i.invoiceNumber}.pdf`, []);
 
   const doc = useGeneratedDocument<Invoice>({
     loadPickerOptions,
     loadItems,
-    getItemId: (i) => i.id,
+    getItemId,
     generateDocument,
-    pdfPath: (i) => `/api/invoices/${i.id}/pdf`,
-    pdfFilename: (i) => `${i.invoiceNumber}.pdf`,
+    pdfPath,
+    pdfFilename,
     pickerMissingMessage: "Choose a business",
     loadErrorFallback: "Could not load invoices",
     generateErrorFallback: "Could not generate invoice",
   });
+
+  const renderItem = useCallback(
+    ({ item }: { item: Invoice }) => (
+      <InvoiceRow item={item} isSharing={doc.sharingId === item.id} onShare={doc.share} />
+    ),
+    [doc.sharingId, doc.share]
+  );
 
   if (doc.initialLoading) return <CenteredSpinner />;
 
@@ -79,19 +126,7 @@ export function InvoicesScreen() {
           </View>
         ) : null
       }
-      renderItem={({ item }) => (
-        <Card>
-          <Text style={styles.number}>{item.invoiceNumber}</Text>
-          <Text style={styles.meta}>{item.business?.name}</Text>
-          <Text style={styles.meta}>
-            {formatDate(item.periodStart)} – {formatDate(item.periodEnd)}
-          </Text>
-          <Text style={styles.amount}>${item.totalAmount.toFixed(2)}</Text>
-          <View style={{ marginTop: spacing.sm }}>
-            <Button title="Share / Save PDF" variant="secondary" onPress={() => doc.share(item)} loading={doc.sharingId === item.id} />
-          </View>
-        </Card>
-      )}
+      renderItem={renderItem}
     />
   );
 }

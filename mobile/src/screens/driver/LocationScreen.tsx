@@ -9,8 +9,7 @@ import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 import { DriverRouteMap } from "../../components/DriverRouteMap";
 import { routeDestination } from "../../lib/routeDestination";
-
-const ACTIVE_STATUSES: Job["status"][] = ["ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY"];
+import { IN_PROGRESS_STATUSES } from "../../lib/jobStatus";
 
 // Dedicated full-screen view of the driver's live route — the same map used
 // inline on the Jobs tab, but as its own destination so a driver can check
@@ -27,7 +26,7 @@ export function LocationScreen() {
   const load = useCallback(async () => {
     try {
       const res = await api.get<{ jobs: Job[] }>("/api/driver/jobs");
-      setJob(res.jobs.find((j) => ACTIVE_STATUSES.includes(j.status)) ?? null);
+      setJob(res.jobs.find((j) => IN_PROGRESS_STATUSES.includes(j.status)) ?? null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load your route");
     } finally {

@@ -1,7 +1,40 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/lib/db";
-import { DELETE as deleteDriver } from "@/app/api/drivers/[id]/route";
-import { createStaff, createDriver, createJobType, createJob, tokenFor, jsonRequest } from "./helpers";
+import { PATCH as updateDriver, DELETE as deleteDriver } from "@/app/api/drivers/[id]/route";
+import { GET as driverStatus } from "@/app/api/driver/status/route";
+import { createStaff, createDriver, createJobType, createJob, tokenFor, jsonRequest, getRequest } from "./helpers";
+
+describe("PATCH /api/drivers/[id]", () => {
+  it("invalidates the driver's existing token when an admin resets their PIN", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const adminToken = await tokenFor(staff.id, "ADMIN", staff.name);
+    const driverOldToken = await tokenFor(driver.id, "DRIVER", driver.name, 0);
+
+    const res = await updateDriver(jsonRequest(`/api/drivers/${driver.id}`, "PATCH", { pin: "9999" }, adminToken), {
+      params: { id: driver.id },
+    });
+    expect(res.status).toBe(200);
+
+    const check = await driverStatus(getRequest("/api/driver/status", driverOldToken));
+    expect(check.status).toBe(401);
+  });
+
+  it("doesn't touch tokenVersion when no PIN is being changed", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const adminToken = await tokenFor(staff.id, "ADMIN", staff.name);
+    const driverOldToken = await tokenFor(driver.id, "DRIVER", driver.name, 0);
+
+    const res = await updateDriver(jsonRequest(`/api/drivers/${driver.id}`, "PATCH", { name: "Renamed" }, adminToken), {
+      params: { id: driver.id },
+    });
+    expect(res.status).toBe(200);
+
+    const check = await driverStatus(getRequest("/api/driver/status", driverOldToken));
+    expect(check.status).toBe(200);
+  });
+});
 
 describe("DELETE /api/drivers/[id]", () => {
   it("deletes a driver with no job/shift/report history", async () => {

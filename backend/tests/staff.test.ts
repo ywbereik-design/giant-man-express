@@ -71,6 +71,39 @@ describe("GET /api/staff", () => {
 });
 
 describe("PATCH /api/staff/[id]", () => {
+  it("invalidates the target's existing token when an admin resets their password", async () => {
+    const { staff: admin } = await createStaff({ role: "ADMIN" });
+    const { staff: target } = await createStaff({ role: "DISPATCH" });
+    const adminToken = await tokenFor(admin.id, "ADMIN", admin.name);
+    const targetOldToken = await tokenFor(target.id, "DISPATCH", target.name, 0);
+
+    const res = await updateStaff(
+      jsonRequest(`/api/staff/${target.id}`, "PATCH", { password: "a-new-password" }, adminToken),
+      { params: { id: target.id } }
+    );
+    expect(res.status).toBe(200);
+
+    const { GET: listJobs } = await import("@/app/api/jobs/route");
+    const check = await listJobs(getRequest("/api/jobs", targetOldToken));
+    expect(check.status).toBe(401);
+  });
+
+  it("doesn't touch tokenVersion when no password is being changed", async () => {
+    const { staff: admin } = await createStaff({ role: "ADMIN" });
+    const { staff: target } = await createStaff({ role: "DISPATCH" });
+    const adminToken = await tokenFor(admin.id, "ADMIN", admin.name);
+    const targetOldToken = await tokenFor(target.id, "DISPATCH", target.name, 0);
+
+    const res = await updateStaff(jsonRequest(`/api/staff/${target.id}`, "PATCH", { name: "Renamed" }, adminToken), {
+      params: { id: target.id },
+    });
+    expect(res.status).toBe(200);
+
+    const { GET: listJobs } = await import("@/app/api/jobs/route");
+    const check = await listJobs(getRequest("/api/jobs", targetOldToken));
+    expect(check.status).toBe(200); // still a valid session — DISPATCH can list jobs
+  });
+
   it("blocks demoting the last active admin", async () => {
     const { staff: onlyAdmin } = await createStaff({ role: "ADMIN" });
     await deactivateAllOtherAdmins(onlyAdmin.id);

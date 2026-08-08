@@ -68,7 +68,13 @@ const StaffRow = memo(function StaffRow({
         <Label>Role</Label>
         <ChipSelect options={ROLE_OPTIONS} selectedId={editRole} onSelect={(id) => onEditRoleChange(id as StaffRole)} />
         <Label>Reset Password (optional — leave blank to keep current)</Label>
-        <FieldInput value={editPassword} onChangeText={onEditPasswordChange} secureTextEntry placeholder="New password" />
+        <FieldInput
+          value={editPassword}
+          onChangeText={onEditPasswordChange}
+          secureTextEntry
+          placeholder="New password"
+          accessibilityLabel="Reset Password"
+        />
         <ErrorText>{editError}</ErrorText>
         <Button title="Save Changes" onPress={() => onSaveEdit(item)} loading={editSaving} />
         <Button title="Cancel" variant="secondary" onPress={onCancelEdit} />

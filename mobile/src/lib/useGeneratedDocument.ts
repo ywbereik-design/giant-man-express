@@ -21,9 +21,11 @@ export interface UseGeneratedDocumentOptions<TItem> {
   loadItems: (cursor?: string) => Promise<ItemPage<TItem>>;
   getItemId: (item: TItem) => string;
   // Caller owns the actual POST — the request body shape (driverId vs
-  // businessId) is the one place Reports and Invoices are still allowed to
-  // differ; everything else here is shared.
-  generateDocument: (pickerId: string, range: { start: Date; end: Date }) => Promise<unknown>;
+  // businessId) and the response's wrapper key ("report" vs "invoice") are
+  // the two places Reports and Invoices are still allowed to differ; the
+  // caller unwraps to the created item itself so generate() below can
+  // prepend it locally instead of a full reload.
+  generateDocument: (pickerId: string, range: { start: Date; end: Date }) => Promise<TItem>;
   pdfPath: (item: TItem) => string;
   pdfFilename: (item: TItem) => string;
   pickerMissingMessage: string;
@@ -71,7 +73,7 @@ export function useGeneratedDocument<TItem>(opts: UseGeneratedDocumentOptions<TI
     }, [load])
   );
 
-  async function loadMore() {
+  const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     setLoadingMore(true);
     try {
@@ -83,9 +85,16 @@ export function useGeneratedDocument<TItem>(opts: UseGeneratedDocumentOptions<TI
     } finally {
       setLoadingMore(false);
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextCursor, loadingMore, opts.loadItems, opts.loadErrorFallback]);
 
-  async function generate() {
+  // generate/share below are useCallback-wrapped (not plain functions like
+  // loadMore) specifically so callers can pass them straight through as a
+  // memoized row's onShare prop — see ReportsScreen/InvoicesScreen, which
+  // wrap their own row components in React.memo. A plain function here would
+  // get a new identity every render regardless, defeating that memoization
+  // even though the row component itself is memoized.
+  const generate = useCallback(async () => {
     setError(null);
     if (!pickerId) {
       setError(opts.pickerMissingMessage);
@@ -93,27 +102,40 @@ export function useGeneratedDocument<TItem>(opts: UseGeneratedDocumentOptions<TI
     }
     setGenerating(true);
     try {
-      await opts.generateDocument(pickerId, range);
-      await load();
+      const created = await opts.generateDocument(pickerId, range);
+      // Prepend locally instead of calling load() — both /api/reports and
+      // /api/invoices order newest-first, so this matches server order
+      // exactly, and unlike a full reload it doesn't discard any additional
+      // pages already pulled in via "Load More".
+      setItems((prev) => [created, ...prev]);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : opts.generateErrorFallback);
     } finally {
       setGenerating(false);
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickerId, range, opts.generateDocument, opts.pickerMissingMessage, opts.generateErrorFallback]);
 
-  async function share(item: TItem) {
-    if (!session) return;
-    const id = opts.getItemId(item);
-    setSharingId(id);
-    try {
-      await downloadAndSharePdf(opts.pdfPath(item), session.token, opts.pdfFilename(item));
-    } catch {
-      Alert.alert("Could not open the PDF", "Check your connection and try again.");
-    } finally {
-      setSharingId(null);
-    }
-  }
+  const share = useCallback(
+    async (item: TItem) => {
+      if (!session) return;
+      const id = opts.getItemId(item);
+      setSharingId(id);
+      try {
+        await downloadAndSharePdf(opts.pdfPath(item), session.token, opts.pdfFilename(item));
+      } catch (e) {
+        // downloadAndSharePdf throws specific messages (timeout, unreachable,
+        // a non-2xx status, or whatever the native share sheet reports) — a
+        // blanket "check your connection" here hid the real cause even when
+        // it had nothing to do with connectivity.
+        Alert.alert("Could not open the PDF", e instanceof Error ? e.message : "Check your connection and try again.");
+      } finally {
+        setSharingId(null);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session, opts.getItemId, opts.pdfPath, opts.pdfFilename]
+  );
 
   return {
     pickerOptions,

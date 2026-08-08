@@ -10,9 +10,6 @@ export const JOB_STATUSES = [
 ] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-export const INVOICE_STATUSES = ["DRAFT", "FINAL"] as const;
-export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
-
 // The driver-facing progress flow, one step at a time, from their app. Every
 // in-flight stage (everything but ASSIGNED, before the driver has even
 // accepted) also allows a same-step jump straight to FAILED — a delivery
@@ -66,15 +63,24 @@ export const SHIFT_PHOTO_EXPIRY_MS = 12 * 60 * 60 * 1000;
 // arbitrary text that would make the driver's Call/WhatsApp buttons dial junk.
 export const PHONE_PATTERN = /^[\d+()\-.\s]{7,20}$/;
 
-// Generous but bounded lengths for dispatcher-entered free text on a Job —
-// these values get embedded verbatim into generated invoice/report PDFs
-// (see /api/invoices, /api/reports/[id]/pdf), so an unbounded string or
-// stop-address array is a resource-exhaustion vector (a pathologically
-// large PDF render) reachable by any ADMIN/DISPATCH account, not just a
-// data-quality issue.
+// Generous but bounded lengths for dispatcher-entered free text on a Job.
+// title specifically gets embedded verbatim into generated invoice PDFs (see
+// the line-item description built in /api/invoices) — notes/addresses aren't
+// rendered into any PDF today, but all of them share this bound since an
+// unbounded string or stop-address array is still a resource-exhaustion
+// vector reachable by any ADMIN/DISPATCH account, not just a data-quality
+// issue.
 export const MAX_JOB_TEXT_LENGTH = 300;
 export const MAX_JOB_NOTES_LENGTH = 2000;
 export const MAX_DROPOFF_STOPS = 50;
+
+// Same reasoning as MAX_JOB_TEXT_LENGTH, applied to the other admin-entered
+// free text that ends up in the system: Business name/contactName/address
+// (name and address are embedded verbatim into invoice PDFs — see
+// InvoiceDocument's "Bill To" block) and JobType name (embedded into invoice
+// line-item descriptions alongside Job.title).
+export const MAX_BUSINESS_TEXT_LENGTH = 300;
+export const MAX_JOB_TYPE_NAME_LENGTH = 100;
 
 // Caller-supplied billing/report windows (invoice generation, hours-by-
 // business) had no upper bound — a multi-year periodStart/periodEnd pulls

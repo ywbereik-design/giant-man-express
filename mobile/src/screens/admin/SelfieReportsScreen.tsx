@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -9,6 +9,49 @@ import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { formatDate, formatTime } from "../../lib/dateRange";
+
+// Memoized so a per-row delete's loading state doesn't force every other
+// entry in the list to re-render too — mirrors the DriverRow pattern in
+// DriversScreen.tsx.
+const SelfieRow = memo(function SelfieRow({
+  item,
+  isDeleting,
+  onDelete,
+}: {
+  item: TimeEntry;
+  isDeleting: boolean;
+  onDelete: (entry: TimeEntry) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Card>
+      <View style={styles.row}>
+        {item.clockInPhoto ? (
+          <PhotoThumbnail uri={item.clockInPhoto} />
+        ) : (
+          <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
+            <Text style={styles.thumbnailEmptyText}>N/A</Text>
+          </View>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.date}>
+            {formatDate(item.clockInAt, { weekday: "short", month: "short", day: "numeric" })}
+          </Text>
+          <Text style={styles.meta}>
+            Clocked in {formatTime(item.clockInAt)}
+            {item.clockOutAt ? ` – out ${formatTime(item.clockOutAt)}` : " (in progress)"}
+          </Text>
+        </View>
+      </View>
+      {item.clockInPhoto && (
+        <View style={{ marginTop: spacing.sm }}>
+          <Button title="Delete Photo" variant="danger" onPress={() => onDelete(item)} loading={isDeleting} />
+        </View>
+      )}
+    </Card>
+  );
+});
 
 export function SelfieReportsScreen() {
   const { colors } = useTheme();
@@ -71,7 +114,7 @@ export function SelfieReportsScreen() {
     }
   }
 
-  async function deletePhoto(entry: TimeEntry) {
+  const deletePhoto = useCallback(async (entry: TimeEntry) => {
     setDeletingId(entry.id);
     setError(null);
     try {
@@ -82,14 +125,24 @@ export function SelfieReportsScreen() {
     } finally {
       setDeletingId(null);
     }
-  }
+  }, []);
 
-  function confirmDeletePhoto(entry: TimeEntry) {
-    Alert.alert("Delete this selfie?", "The clock-in record stays — only the photo is removed. This can't be undone.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deletePhoto(entry) },
-    ]);
-  }
+  const confirmDeletePhoto = useCallback(
+    (entry: TimeEntry) => {
+      Alert.alert("Delete this selfie?", "The clock-in record stays — only the photo is removed. This can't be undone.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => deletePhoto(entry) },
+      ]);
+    },
+    [deletePhoto]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: TimeEntry }) => (
+      <SelfieRow item={item} isDeleting={deletingId === item.id} onDelete={confirmDeletePhoto} />
+    ),
+    [deletingId, confirmDeletePhoto]
+  );
 
   if (initialLoading) return <CenteredSpinner />;
 
@@ -129,38 +182,7 @@ export function SelfieReportsScreen() {
           </View>
         ) : null
       }
-      renderItem={({ item }) => (
-        <Card>
-          <View style={styles.row}>
-            {item.clockInPhoto ? (
-              <PhotoThumbnail uri={item.clockInPhoto} />
-            ) : (
-              <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
-                <Text style={styles.thumbnailEmptyText}>N/A</Text>
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.date}>
-                {formatDate(item.clockInAt, { weekday: "short", month: "short", day: "numeric" })}
-              </Text>
-              <Text style={styles.meta}>
-                Clocked in {formatTime(item.clockInAt)}
-                {item.clockOutAt ? ` – out ${formatTime(item.clockOutAt)}` : " (in progress)"}
-              </Text>
-            </View>
-          </View>
-          {item.clockInPhoto && (
-            <View style={{ marginTop: spacing.sm }}>
-              <Button
-                title="Delete Photo"
-                variant="danger"
-                onPress={() => confirmDeletePhoto(item)}
-                loading={deletingId === item.id}
-              />
-            </View>
-          )}
-        </Card>
-      )}
+      renderItem={renderItem}
     />
   );
 }

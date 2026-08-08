@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -14,6 +14,103 @@ function parseRate(raw: string): { rate?: number; error?: string } {
   if (Number.isNaN(rate) || rate <= 0) return { error: "Billing rate must be a positive number" };
   return { rate };
 }
+
+// Memoized so typing in the "Add Business" form above the list doesn't
+// re-render every existing business card on every keystroke — mirrors the
+// DriverRow pattern in DriversScreen.tsx. Edit-mode fields are normalized to
+// constant values for rows that aren't being edited (see renderItem below)
+// so memo's shallow prop compare still bails out for them even while a
+// different row's edit form is being typed into.
+const BusinessRow = memo(function BusinessRow({
+  item,
+  isEditing,
+  editName,
+  editContactName,
+  editContactEmail,
+  editPhone,
+  editAddress,
+  editBillingRate,
+  editError,
+  editSaving,
+  onEditNameChange,
+  onEditContactNameChange,
+  onEditContactEmailChange,
+  onEditPhoneChange,
+  onEditAddressChange,
+  onEditBillingRateChange,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+}: {
+  item: Business;
+  isEditing: boolean;
+  editName: string;
+  editContactName: string;
+  editContactEmail: string;
+  editPhone: string;
+  editAddress: string;
+  editBillingRate: string;
+  editError: string | null;
+  editSaving: boolean;
+  onEditNameChange: (v: string) => void;
+  onEditContactNameChange: (v: string) => void;
+  onEditContactEmailChange: (v: string) => void;
+  onEditPhoneChange: (v: string) => void;
+  onEditAddressChange: (v: string) => void;
+  onEditBillingRateChange: (v: string) => void;
+  onStartEdit: (business: Business) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (business: Business) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  if (isEditing) {
+    return (
+      <Card>
+        <Label>Business Name</Label>
+        <FieldInput value={editName} onChangeText={onEditNameChange} accessibilityLabel="Business Name" />
+        <Label>Contact Name (optional)</Label>
+        <FieldInput value={editContactName} onChangeText={onEditContactNameChange} accessibilityLabel="Contact Name" />
+        <Label>Contact Email (optional)</Label>
+        <FieldInput
+          value={editContactEmail}
+          onChangeText={onEditContactEmailChange}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          accessibilityLabel="Contact Email"
+        />
+        <Label>Phone (optional)</Label>
+        <FieldInput value={editPhone} onChangeText={onEditPhoneChange} keyboardType="phone-pad" accessibilityLabel="Phone" />
+        <Label>Address (optional)</Label>
+        <FieldInput value={editAddress} onChangeText={onEditAddressChange} accessibilityLabel="Address" />
+        <Label>Billing Rate per Job ($, optional)</Label>
+        <FieldInput
+          value={editBillingRate}
+          onChangeText={onEditBillingRateChange}
+          keyboardType="decimal-pad"
+          accessibilityLabel="Billing Rate per Job"
+        />
+        <ErrorText>{editError}</ErrorText>
+        <Button title="Save Changes" onPress={() => onSaveEdit(item)} loading={editSaving} />
+        <Button title="Cancel" variant="secondary" onPress={onCancelEdit} />
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <Text style={styles.name}>{item.name}</Text>
+      {item.contactEmail && <Text style={styles.meta}>{item.contactEmail}</Text>}
+      {item.phone && <Text style={styles.meta}>{item.phone}</Text>}
+      {item.address && <Text style={styles.meta}>{item.address}</Text>}
+      <Text style={styles.meta}>Rate: {item.billingRate ? `$${item.billingRate.toFixed(2)} / job` : "not set"}</Text>
+      <View style={{ marginTop: spacing.sm }}>
+        <Button title="Edit" variant="secondary" onPress={() => onStartEdit(item)} />
+      </View>
+    </Card>
+  );
+});
 
 export function BusinessesScreen() {
   const { colors } = useTheme();
@@ -99,7 +196,7 @@ export function BusinessesScreen() {
     }
   }
 
-  function startEdit(business: Business) {
+  const startEdit = useCallback((business: Business) => {
     setEditingId(business.id);
     setEditName(business.name);
     setEditContactName(business.contactName ?? "");
@@ -108,128 +205,136 @@ export function BusinessesScreen() {
     setEditAddress(business.address ?? "");
     setEditBillingRate(business.billingRate ? String(business.billingRate) : "");
     setEditError(null);
-  }
+  }, []);
 
-  function cancelEdit() {
-    setEditingId(null);
-  }
+  const cancelEdit = useCallback(() => setEditingId(null), []);
 
-  async function saveEdit(business: Business) {
-    setEditError(null);
-    if (!editName.trim()) {
-      setEditError("Business name is required");
-      return;
-    }
-    if (editContactEmail.trim() && !isValidEmail(editContactEmail.trim())) {
-      setEditError("Enter a valid contact email address");
-      return;
-    }
-    if (editPhone.trim() && !isValidPhone(editPhone.trim())) {
-      setEditError("Enter a valid phone number, or leave it blank");
-      return;
-    }
-    const { rate, error: rateError } = parseRate(editBillingRate);
-    if (rateError) {
-      setEditError(rateError);
-      return;
-    }
-    setEditSaving(true);
-    try {
-      await api.patch(`/api/businesses/${business.id}`, {
-        name: editName.trim(),
-        contactName: editContactName.trim() || undefined,
-        contactEmail: editContactEmail.trim() || undefined,
-        phone: editPhone.trim() || undefined,
-        address: editAddress.trim() || undefined,
-        billingRate: rate,
-      });
-      setEditingId(null);
-      await load();
-    } catch (e) {
-      setEditError(e instanceof ApiError ? e.message : "Could not save changes");
-    } finally {
-      setEditSaving(false);
-    }
-  }
+  const saveEdit = useCallback(
+    async (business: Business) => {
+      setEditError(null);
+      if (!editName.trim()) {
+        setEditError("Business name is required");
+        return;
+      }
+      if (editContactEmail.trim() && !isValidEmail(editContactEmail.trim())) {
+        setEditError("Enter a valid contact email address");
+        return;
+      }
+      if (editPhone.trim() && !isValidPhone(editPhone.trim())) {
+        setEditError("Enter a valid phone number, or leave it blank");
+        return;
+      }
+      const { rate, error: rateError } = parseRate(editBillingRate);
+      if (rateError) {
+        setEditError(rateError);
+        return;
+      }
+      setEditSaving(true);
+      try {
+        await api.patch(`/api/businesses/${business.id}`, {
+          name: editName.trim(),
+          contactName: editContactName.trim() || undefined,
+          contactEmail: editContactEmail.trim() || undefined,
+          phone: editPhone.trim() || undefined,
+          address: editAddress.trim() || undefined,
+          billingRate: rate,
+        });
+        setEditingId(null);
+        await load();
+      } catch (e) {
+        setEditError(e instanceof ApiError ? e.message : "Could not save changes");
+      } finally {
+        setEditSaving(false);
+      }
+    },
+    [editName, editContactName, editContactEmail, editPhone, editAddress, editBillingRate, load]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Business }) => {
+      const isEditing = editingId === item.id;
+      return (
+        <BusinessRow
+          item={item}
+          isEditing={isEditing}
+          editName={isEditing ? editName : ""}
+          editContactName={isEditing ? editContactName : ""}
+          editContactEmail={isEditing ? editContactEmail : ""}
+          editPhone={isEditing ? editPhone : ""}
+          editAddress={isEditing ? editAddress : ""}
+          editBillingRate={isEditing ? editBillingRate : ""}
+          editError={isEditing ? editError : null}
+          editSaving={isEditing ? editSaving : false}
+          onEditNameChange={setEditName}
+          onEditContactNameChange={setEditContactName}
+          onEditContactEmailChange={setEditContactEmail}
+          onEditPhoneChange={setEditPhone}
+          onEditAddressChange={setEditAddress}
+          onEditBillingRateChange={setEditBillingRate}
+          onStartEdit={startEdit}
+          onCancelEdit={cancelEdit}
+          onSaveEdit={saveEdit}
+        />
+      );
+    },
+    [
+      editingId,
+      editName,
+      editContactName,
+      editContactEmail,
+      editPhone,
+      editAddress,
+      editBillingRate,
+      editError,
+      editSaving,
+      startEdit,
+      cancelEdit,
+      saveEdit,
+    ]
+  );
 
   if (initialLoading) return <CenteredSpinner />;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-    <FlatList
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ padding: spacing.md }}
-      data={businesses}
-      keyExtractor={(b) => b.id}
-      ListHeaderComponent={
-        <View>
-          <SectionTitle>Add Business</SectionTitle>
-          <Card>
-            <Label>Business Name</Label>
-            <FieldInput value={name} onChangeText={setName} placeholder="Capital BBQ" />
-            <Label>Contact Name (optional)</Label>
-            <FieldInput value={contactName} onChangeText={setContactName} placeholder="Jane Doe" />
-            <Label>Contact Email (optional)</Label>
-            <FieldInput value={contactEmail} onChangeText={setContactEmail} autoCapitalize="none" keyboardType="email-address" placeholder="ap@business.ca" />
-            <Label>Phone (optional)</Label>
-            <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />
-            <Label>Address (optional)</Label>
-            <FieldInput value={address} onChangeText={setAddress} placeholder="100 Main St, Ottawa" />
-            <Label>Billing Rate per Job ($, optional)</Label>
-            <FieldInput value={billingRate} onChangeText={setBillingRate} keyboardType="decimal-pad" placeholder="45" />
-            <ErrorText>{error}</ErrorText>
-            <Button title="Add Business" onPress={addBusiness} loading={saving} />
-          </Card>
-          <SectionTitle>Businesses</SectionTitle>
-        </View>
-      }
-      ListEmptyComponent={!error ? <Text style={styles.empty}>No businesses yet.</Text> : null}
-      renderItem={({ item }) => {
-        if (editingId === item.id) {
-          return (
+      <FlatList
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: spacing.md }}
+        data={businesses}
+        keyExtractor={(b) => b.id}
+        ListHeaderComponent={
+          <View>
+            <SectionTitle>Add Business</SectionTitle>
             <Card>
               <Label>Business Name</Label>
-              <FieldInput value={editName} onChangeText={setEditName} />
+              <FieldInput value={name} onChangeText={setName} placeholder="Capital BBQ" />
               <Label>Contact Name (optional)</Label>
-              <FieldInput value={editContactName} onChangeText={setEditContactName} />
+              <FieldInput value={contactName} onChangeText={setContactName} placeholder="Jane Doe" />
               <Label>Contact Email (optional)</Label>
-              <FieldInput value={editContactEmail} onChangeText={setEditContactEmail} autoCapitalize="none" keyboardType="email-address" />
+              <FieldInput value={contactEmail} onChangeText={setContactEmail} autoCapitalize="none" keyboardType="email-address" placeholder="ap@business.ca" />
               <Label>Phone (optional)</Label>
-              <FieldInput value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" />
+              <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />
               <Label>Address (optional)</Label>
-              <FieldInput value={editAddress} onChangeText={setEditAddress} />
+              <FieldInput value={address} onChangeText={setAddress} placeholder="100 Main St, Ottawa" />
               <Label>Billing Rate per Job ($, optional)</Label>
-              <FieldInput value={editBillingRate} onChangeText={setEditBillingRate} keyboardType="decimal-pad" />
-              <ErrorText>{editError}</ErrorText>
-              <Button title="Save Changes" onPress={() => saveEdit(item)} loading={editSaving} />
-              <Button title="Cancel" variant="secondary" onPress={cancelEdit} />
+              <FieldInput value={billingRate} onChangeText={setBillingRate} keyboardType="decimal-pad" placeholder="45" />
+              <ErrorText>{error}</ErrorText>
+              <Button title="Add Business" onPress={addBusiness} loading={saving} />
             </Card>
-          );
+            <SectionTitle>Businesses</SectionTitle>
+          </View>
         }
-        return (
-          <Card>
-            <Text style={styles.name}>{item.name}</Text>
-            {item.contactEmail && <Text style={styles.meta}>{item.contactEmail}</Text>}
-            {item.phone && <Text style={styles.meta}>{item.phone}</Text>}
-            {item.address && <Text style={styles.meta}>{item.address}</Text>}
-            <Text style={styles.meta}>
-              Rate: {item.billingRate ? `$${item.billingRate.toFixed(2)} / job` : "not set"}
-            </Text>
-            <View style={{ marginTop: spacing.sm }}>
-              <Button title="Edit" variant="secondary" onPress={() => startEdit(item)} />
-            </View>
-          </Card>
-        );
-      }}
-    />
+        ListEmptyComponent={!error ? <Text style={styles.empty}>No businesses yet.</Text> : null}
+        renderItem={renderItem}
+      />
     </KeyboardAvoidingView>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-  name: { color: colors.text, fontSize: 16, fontWeight: "700" },
-  meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
-  empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
+    name: { color: colors.text, fontSize: 16, fontWeight: "700" },
+    meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
+    empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
   });
 }

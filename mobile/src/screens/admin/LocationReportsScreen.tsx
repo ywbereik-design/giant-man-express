@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
@@ -8,6 +8,63 @@ import { DriverLiveMap } from "../../components/DriverLiveMap";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { formatTime } from "../../lib/dateRange";
+
+// Memoized so an unrelated state change elsewhere on screen (e.g. a
+// different row expanding, or the top-level error banner) doesn't
+// re-render every driver row — and, critically, doesn't remount every
+// expanded row's DriverLiveMap, which already has its own polling
+// lifecycle to worry about. Mirrors the DriverRow pattern in
+// DriversScreen.tsx.
+const LocationRow = memo(function LocationRow({
+  item,
+  expanded,
+  detail,
+  isDetailLoading,
+  onToggleExpand,
+}: {
+  item: Driver;
+  expanded: boolean;
+  detail: DriverLocationDetail | undefined;
+  isDetailLoading: boolean;
+  onToggleExpand: (driver: Driver) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Card>
+      <Pressable style={styles.row} onPress={() => onToggleExpand(item)}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.name}>{item.name}</Text>
+          <Text style={styles.meta}>{(item.todayDistanceKm ?? 0).toFixed(1)} km today</Text>
+        </View>
+        <Badge text={item.clockedIn ? "Clocked In" : "Clocked Out"} tone={item.clockedIn ? "success" : "muted"} />
+      </Pressable>
+
+      {expanded && (
+        <View style={styles.detail}>
+          {isDetailLoading && <CenteredSpinner />}
+          {detail && (
+            <>
+              {detail.today.shifts.length === 0 ? (
+                <Text style={styles.meta}>No shifts today.</Text>
+              ) : (
+                detail.today.shifts.map((s) => (
+                  <Text key={s.id} style={styles.meta}>
+                    {formatTime(s.clockInAt)} – {s.clockOutAt ? formatTime(s.clockOutAt) : "in progress"}
+                    {"  ·  "}
+                    {s.distanceKm.toFixed(1)} km
+                  </Text>
+                ))
+              )}
+              <Text style={styles.sectionLabel}>Live Map</Text>
+              <DriverLiveMap driverId={item.id} />
+            </>
+          )}
+        </View>
+      )}
+    </Card>
+  );
+});
 
 export function LocationReportsScreen() {
   const { colors } = useTheme();
@@ -36,24 +93,40 @@ export function LocationReportsScreen() {
     }, [load])
   );
 
-  async function toggleExpand(driver: Driver) {
-    if (expandedId === driver.id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(driver.id);
-    if (details[driver.id]) return;
+  const toggleExpand = useCallback(
+    async (driver: Driver) => {
+      if (expandedId === driver.id) {
+        setExpandedId(null);
+        return;
+      }
+      setExpandedId(driver.id);
+      if (details[driver.id]) return;
 
-    setDetailLoadingId(driver.id);
-    try {
-      const res = await api.get<DriverLocationDetail>(`/api/drivers/${driver.id}/location`);
-      setDetails((prev) => ({ ...prev, [driver.id]: res }));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not load location report");
-    } finally {
-      setDetailLoadingId(null);
-    }
-  }
+      setDetailLoadingId(driver.id);
+      try {
+        const res = await api.get<DriverLocationDetail>(`/api/drivers/${driver.id}/location`);
+        setDetails((prev) => ({ ...prev, [driver.id]: res }));
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Could not load location report");
+      } finally {
+        setDetailLoadingId(null);
+      }
+    },
+    [expandedId, details]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Driver }) => (
+      <LocationRow
+        item={item}
+        expanded={expandedId === item.id}
+        detail={details[item.id]}
+        isDetailLoading={detailLoadingId === item.id}
+        onToggleExpand={toggleExpand}
+      />
+    ),
+    [expandedId, details, detailLoadingId, toggleExpand]
+  );
 
   if (initialLoading) return <CenteredSpinner />;
 
@@ -71,45 +144,7 @@ export function LocationReportsScreen() {
         </View>
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No active drivers yet.</Text> : null}
-      renderItem={({ item }) => {
-        const expanded = expandedId === item.id;
-        const detail = details[item.id];
-        return (
-          <Card>
-            <Pressable style={styles.row} onPress={() => toggleExpand(item)}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.meta}>{(item.todayDistanceKm ?? 0).toFixed(1)} km today</Text>
-              </View>
-              <Badge text={item.clockedIn ? "Clocked In" : "Clocked Out"} tone={item.clockedIn ? "success" : "muted"} />
-            </Pressable>
-
-            {expanded && (
-              <View style={styles.detail}>
-                {detailLoadingId === item.id && <CenteredSpinner />}
-                {detail && (
-                  <>
-                    {detail.today.shifts.length === 0 ? (
-                      <Text style={styles.meta}>No shifts today.</Text>
-                    ) : (
-                      detail.today.shifts.map((s) => (
-                        <Text key={s.id} style={styles.meta}>
-                          {formatTime(s.clockInAt)} –{" "}
-                          {s.clockOutAt ? formatTime(s.clockOutAt) : "in progress"}
-                          {"  ·  "}
-                          {s.distanceKm.toFixed(1)} km
-                        </Text>
-                      ))
-                    )}
-                    <Text style={styles.sectionLabel}>Live Map</Text>
-                    <DriverLiveMap driverId={item.id} />
-                  </>
-                )}
-              </View>
-            )}
-          </Card>
-        );
-      }}
+      renderItem={renderItem}
     />
   );
 }

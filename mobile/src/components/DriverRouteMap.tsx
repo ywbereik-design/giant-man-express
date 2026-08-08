@@ -1,14 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text } from "react-native";
 import * as Location from "expo-location";
-import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
-import MapViewDirections from "react-native-maps-directions";
-import { Ionicons } from "@expo/vector-icons";
 import { spacing, ThemeColors } from "../theme/theme";
 import { useTheme } from "../theme/ThemeContext";
 import { GOOGLE_MAPS_API_KEY, LatLng, geocodeAddress } from "../lib/googleMaps";
+import { LiveRouteMap, MapFallback } from "./LiveRouteMap";
 
-const EDGE_PADDING = { top: 48, right: 48, bottom: 48, left: 48 };
 // Distance-based refresh — matches the shift location tracking cadence
 // elsewhere in the app (see location/shiftTracking.ts) rather than
 // polling more aggressively than the driver is actually moving.
@@ -31,7 +28,6 @@ interface Props {
 export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const mapRef = useRef<MapView>(null);
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [destination, setDestination] = useState<LatLng | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,26 +77,26 @@ export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) 
 
   if (!GOOGLE_MAPS_API_KEY) {
     return (
-      <View style={styles.fallback}>
+      <MapFallback>
         <Text style={styles.fallbackText}>Map unavailable (no Google Maps API key configured).</Text>
         <Text style={styles.fallbackAddress}>
           {destinationLabel}: {destinationAddress}
         </Text>
-      </View>
+      </MapFallback>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.fallback}>
+      <MapFallback>
         <Text style={styles.fallbackText}>{error}</Text>
-      </View>
+      </MapFallback>
     );
   }
 
   if (geocodeFailed) {
     return (
-      <View style={styles.fallback}>
+      <MapFallback>
         <Text style={styles.fallbackText}>Couldn't map this address — check your connection.</Text>
         <Text style={styles.fallbackAddress}>
           {destinationLabel}: {destinationAddress}
@@ -108,89 +104,23 @@ export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) 
         <Pressable onPress={retryGeocode} hitSlop={8} accessibilityRole="button" accessibilityLabel="Retry">
           <Text style={styles.retryText}>Retry</Text>
         </Pressable>
-      </View>
+      </MapFallback>
     );
   }
 
   if (!origin || !destination) {
     return (
-      <View style={[styles.fallback, styles.loading]}>
+      <MapFallback centered>
         <Text style={styles.fallbackText}>Locating you and {destinationLabel.toLowerCase()}…</Text>
-      </View>
+      </MapFallback>
     );
   }
 
-  return (
-    <View style={styles.mapWrapper}>
-      <MapView ref={mapRef} provider={PROVIDER_GOOGLE} style={styles.map} initialRegion={toRegion(origin)}>
-        <Marker coordinate={origin} title="You" anchor={{ x: 0.5, y: 0.5 }}>
-          <View style={styles.driverMarker}>
-            <Ionicons name="navigate" size={14} color={colors.primaryText} />
-          </View>
-        </Marker>
-        <Marker coordinate={destination} title={destinationLabel} pinColor={colors.primary} />
-        <MapViewDirections
-          origin={origin}
-          destination={destination}
-          apikey={GOOGLE_MAPS_API_KEY}
-          strokeWidth={4}
-          strokeColor={colors.primary}
-          onReady={(result) => {
-            mapRef.current?.fitToCoordinates(result.coordinates, {
-              edgePadding: EDGE_PADDING,
-              animated: true,
-            });
-          }}
-          onError={() => {
-            // Directions failed (no route, quota, etc.) — still frame both
-            // markers so the map isn't stuck zoomed on just the origin.
-            mapRef.current?.fitToCoordinates([origin, destination], {
-              edgePadding: EDGE_PADDING,
-              animated: true,
-            });
-          }}
-        />
-      </MapView>
-    </View>
-  );
-}
-
-function toRegion(point: LatLng) {
-  return { ...point, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+  return <LiveRouteMap origin={origin} destination={destination} destinationLabel={destinationLabel} />;
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    mapWrapper: {
-      height: 260,
-      borderRadius: 12,
-      overflow: "hidden",
-      marginTop: spacing.sm,
-    },
-    map: {
-      flex: 1,
-    },
-    driverMarker: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: colors.primary,
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 2,
-      borderColor: colors.primaryText,
-    },
-    fallback: {
-      marginTop: spacing.sm,
-      padding: spacing.md,
-      borderRadius: 12,
-      backgroundColor: colors.surfaceAlt,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    loading: {
-      alignItems: "center",
-    },
     fallbackText: {
       color: colors.textMuted,
       fontSize: 13,

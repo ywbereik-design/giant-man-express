@@ -4,14 +4,14 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
-import { PHONE_PATTERN } from "@/lib/constants";
+import { MAX_BUSINESS_TEXT_LENGTH, PHONE_PATTERN } from "@/lib/constants";
 
 const updateSchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  contactName: z.string().trim().optional(),
+  name: z.string().trim().min(1).max(MAX_BUSINESS_TEXT_LENGTH).optional(),
+  contactName: z.string().trim().max(MAX_BUSINESS_TEXT_LENGTH).optional(),
   contactEmail: z.string().trim().toLowerCase().email().optional().or(z.literal("")),
   phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
-  address: z.string().trim().optional(),
+  address: z.string().trim().max(MAX_BUSINESS_TEXT_LENGTH).optional(),
   billingRate: z.number().positive().optional(),
 });
 

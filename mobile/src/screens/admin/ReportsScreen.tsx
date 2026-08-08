@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { api } from "../../api/client";
 import { Driver, HoursReport } from "../../api/types";
@@ -8,6 +8,40 @@ import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { formatRange, formatDate } from "../../lib/dateRange";
 import { useGeneratedDocument } from "../../lib/useGeneratedDocument";
+
+// Memoized so typing in the "Generate Hours Report" form above doesn't
+// re-render every already-generated report card — mirrors the DriverRow
+// pattern in DriversScreen.tsx.
+const ReportRow = memo(function ReportRow({
+  item,
+  isSharing,
+  onShare,
+}: {
+  item: HoursReport;
+  isSharing: boolean;
+  onShare: (item: HoursReport) => void;
+}) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <Card>
+      <Text style={styles.number}>{item.reportNumber}</Text>
+      <Text style={styles.meta}>
+        {item.driver?.name} ({item.driver?.employeeCode})
+      </Text>
+      <Text style={styles.meta}>
+        {formatDate(item.periodStart)} – {formatDate(item.periodEnd)}
+      </Text>
+      <View style={styles.statsRow}>
+        <Text style={styles.hours}>{item.totalHours.toFixed(2)} hrs</Text>
+        <Text style={styles.distance}>{item.totalDistanceKm.toFixed(1)} km</Text>
+      </View>
+      <View style={{ marginTop: spacing.sm }}>
+        <Button title="Share / Save PDF" variant="secondary" onPress={() => onShare(item)} loading={isSharing} />
+      </View>
+    </Card>
+  );
+});
 
 export function ReportsScreen() {
   const { colors } = useTheme();
@@ -24,22 +58,38 @@ export function ReportsScreen() {
     return { items: res.reports, nextCursor: res.nextCursor };
   }, []);
   const generateDocument = useCallback(
-    (driverId: string, range: { start: Date; end: Date }) =>
-      api.post("/api/reports", { driverId, periodStart: range.start.toISOString(), periodEnd: range.end.toISOString() }),
+    async (driverId: string, range: { start: Date; end: Date }) => {
+      const res = await api.post<{ report: HoursReport }>("/api/reports", {
+        driverId,
+        periodStart: range.start.toISOString(),
+        periodEnd: range.end.toISOString(),
+      });
+      return res.report;
+    },
     []
   );
+  const getItemId = useCallback((r: HoursReport) => r.id, []);
+  const pdfPath = useCallback((r: HoursReport) => `/api/reports/${r.id}/pdf`, []);
+  const pdfFilename = useCallback((r: HoursReport) => `${r.reportNumber}.pdf`, []);
 
   const doc = useGeneratedDocument<HoursReport>({
     loadPickerOptions,
     loadItems,
-    getItemId: (r) => r.id,
+    getItemId,
     generateDocument,
-    pdfPath: (r) => `/api/reports/${r.id}/pdf`,
-    pdfFilename: (r) => `${r.reportNumber}.pdf`,
+    pdfPath,
+    pdfFilename,
     pickerMissingMessage: "Choose a driver",
     loadErrorFallback: "Could not load reports",
     generateErrorFallback: "Could not generate report",
   });
+
+  const renderItem = useCallback(
+    ({ item }: { item: HoursReport }) => (
+      <ReportRow item={item} isSharing={doc.sharingId === item.id} onShare={doc.share} />
+    ),
+    [doc.sharingId, doc.share]
+  );
 
   if (doc.initialLoading) return <CenteredSpinner />;
 
@@ -75,24 +125,7 @@ export function ReportsScreen() {
           </View>
         ) : null
       }
-      renderItem={({ item }) => (
-        <Card>
-          <Text style={styles.number}>{item.reportNumber}</Text>
-          <Text style={styles.meta}>
-            {item.driver?.name} ({item.driver?.employeeCode})
-          </Text>
-          <Text style={styles.meta}>
-            {formatDate(item.periodStart)} – {formatDate(item.periodEnd)}
-          </Text>
-          <View style={styles.statsRow}>
-            <Text style={styles.hours}>{item.totalHours.toFixed(2)} hrs</Text>
-            <Text style={styles.distance}>{item.totalDistanceKm.toFixed(1)} km</Text>
-          </View>
-          <View style={{ marginTop: spacing.sm }}>
-            <Button title="Share / Save PDF" variant="secondary" onPress={() => doc.share(item)} loading={doc.sharingId === item.id} />
-          </View>
-        </Card>
-      )}
+      renderItem={renderItem}
     />
   );
 }

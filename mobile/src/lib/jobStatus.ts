@@ -1,5 +1,12 @@
 import { Job, JobStatus } from "../api/types";
 
+// A job that's been accepted but not yet finished — actively being worked
+// on right now. Same membership wherever "currently in progress" matters:
+// which job needs live routing (routeDestination, driver LocationScreen)
+// and which can still be marked FAILED (driver JobsScreen's canFail) share
+// this exact set, even though each uses it for a different purpose.
+export const IN_PROGRESS_STATUSES: JobStatus[] = ["ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY"];
+
 export const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = {
   ASSIGNED: "info",
   ACCEPTED: "info",

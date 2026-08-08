@@ -13,7 +13,7 @@ import { DriverRouteMap } from "../../components/DriverRouteMap";
 import { routeDestination } from "../../lib/routeDestination";
 import { capturePhoto } from "../../lib/capturePhoto";
 import { getCoords } from "../../lib/getCoords";
-import { STATUS_TONE } from "../../lib/jobStatus";
+import { IN_PROGRESS_STATUSES, STATUS_TONE } from "../../lib/jobStatus";
 import { JobStageBadges } from "../../components/JobStageBadges";
 import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { AddressRow } from "../../components/AddressRow";
@@ -66,7 +66,7 @@ const BATCH_STATUS_LABEL: Partial<Record<JobStatus, string>> = {
 // A job can be marked failed from any stage before it's actually delivered —
 // mirrors DRIVER_ALLOWED_TRANSITIONS on the backend.
 function canFail(status: JobStatus): boolean {
-  return status === "ACCEPTED" || status === "ARRIVED" || status === "PICKED_UP" || status === "ON_THE_WAY";
+  return IN_PROGRESS_STATUSES.includes(status);
 }
 
 // Ranks the active, in-progress statuses by how close they are to needing
@@ -392,45 +392,49 @@ export function DriverJobsScreen() {
     async (job: Job) => {
       const action = NEXT_ACTION[job.status];
       if (!action) return;
+      // Set before the (possibly slow) camera capture below, not after —
+      // isUpdating disables this job's action button once this is set, so a
+      // fast double-tap while the camera modal is still opening would
+      // otherwise fire a second concurrent submission for the same job.
+      setUpdatingId(job.id);
       setError(null);
       setNotice(null);
 
-      let photo: string | undefined;
-      let lat: number | undefined;
-      let lng: number | undefined;
+      try {
+        let photo: string | undefined;
+        let lat: number | undefined;
+        let lng: number | undefined;
 
-      const pending = pendingCaptureRef.current;
-      const reusable = pending && pending.jobId === job.id && pending.nextStatus === action.next;
+        const pending = pendingCaptureRef.current;
+        const reusable = pending && pending.jobId === job.id && pending.nextStatus === action.next;
 
-      if (reusable) {
-        photo = pending.photo;
-        lat = pending.lat;
-        lng = pending.lng;
-      } else if (isPhotoRequired(action.next, job)) {
-        try {
-          const captured = await capturePhoto(ImagePicker.CameraType.back);
-          if (!captured) {
-            const label = action.next === "PICKED_UP" ? "pickup" : "delivery";
-            setError(`A ${label} photo is required to continue.`);
+        if (reusable) {
+          photo = pending.photo;
+          lat = pending.lat;
+          lng = pending.lng;
+        } else if (isPhotoRequired(action.next, job)) {
+          try {
+            const captured = await capturePhoto(ImagePicker.CameraType.back);
+            if (!captured) {
+              const label = action.next === "PICKED_UP" ? "pickup" : "delivery";
+              setError(`A ${label} photo is required to continue.`);
+              return;
+            }
+            photo = captured;
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not open the camera");
             return;
           }
-          photo = captured;
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "Could not open the camera");
-          return;
+          // Attached as verification metadata alongside the photo — best
+          // effort, a denied/unavailable GPS fix still lets the delivery proceed.
+          const { coords } = await getCoords();
+          if (coords) {
+            lat = coords.lat;
+            lng = coords.lng;
+          }
+          pendingCaptureRef.current = { jobId: job.id, nextStatus: action.next, photo, lat, lng };
         }
-        // Attached as verification metadata alongside the photo — best
-        // effort, a denied/unavailable GPS fix still lets the delivery proceed.
-        const { coords } = await getCoords();
-        if (coords) {
-          lat = coords.lat;
-          lng = coords.lng;
-        }
-        pendingCaptureRef.current = { jobId: job.id, nextStatus: action.next, photo, lat, lng };
-      }
 
-      setUpdatingId(job.id);
-      try {
         const sent = await sendStatusUpdate(job, action.next, { photo, lat, lng });
         // Handed off either way (sent live, or handed to the offline queue) —
         // nothing left to retry with this same captured photo.

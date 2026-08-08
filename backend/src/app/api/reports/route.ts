@@ -18,7 +18,22 @@ export async function GET(req: NextRequest) {
   const rows = await prisma.hoursReport.findMany({
     where: driverId ? { driverId } : {},
     orderBy: [{ generatedAt: "desc" }, { id: "desc" }],
-    include: { driver: { select: { name: true, employeeCode: true } } },
+    // entriesJson is a full snapshot of every TimeEntry in the report's
+    // period — only the PDF route needs it (see /api/reports/[id]/pdf). The
+    // list is just a picker, same class of fix as the jobs/time-entries
+    // photo-payload bug: an explicit select here, not include, so this row
+    // never leaves the DB on a paginated list of potentially many reports.
+    select: {
+      id: true,
+      reportNumber: true,
+      driverId: true,
+      periodStart: true,
+      periodEnd: true,
+      totalHours: true,
+      totalDistanceKm: true,
+      generatedAt: true,
+      driver: { select: { name: true, employeeCode: true } },
+    },
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });

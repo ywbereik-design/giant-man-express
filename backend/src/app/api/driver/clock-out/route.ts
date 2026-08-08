@@ -24,9 +24,19 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Not currently clocked in" }, { status: 409 });
   }
 
-  const entry = await prisma.timeEntry.update({
-    where: { id: open.id },
+  // Without the clockOutAt: null guard, a double-tap (or the offline-queue
+  // flush racing a manual retry) could both read the same open entry and
+  // both update it — the second write would silently overwrite the first
+  // clock-out's lat/lng with its own, and both requests would report success
+  // even though only one clock-out actually happened.
+  const result = await prisma.timeEntry.updateMany({
+    where: { id: open.id, clockOutAt: null },
     data: { clockOutAt: new Date(), clockOutLat: body.data.lat, clockOutLng: body.data.lng },
   });
+  if (result.count === 0) {
+    return Response.json({ error: "Already clocked out — please retry." }, { status: 409 });
+  }
+
+  const entry = await prisma.timeEntry.findUnique({ where: { id: open.id } });
   return Response.json({ entry });
 }
