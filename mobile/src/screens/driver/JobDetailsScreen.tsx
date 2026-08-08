@@ -1,15 +1,19 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ScrollView, Text, View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { ApiError } from "../../api/client";
+import { Job } from "../../api/types";
 import { Badge, Button, Card, ErrorText } from "../../components/ui";
 import { AddressRow } from "../../components/AddressRow";
 import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { SwipeToAccept } from "../../components/SwipeToAccept";
+import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
 import { openNavigationTo } from "../../lib/openInMaps";
 import { submitJobStatus } from "../../lib/submitJobStatus";
-import { STATUS_TONE, hasReachedAnyStage } from "../../lib/jobStatus";
+import { NEXT_ACTION, useJobStatusAdvance } from "../../lib/useJobStatusAdvance";
+import { STATUS_TONE, LIFECYCLE_STEPS, canFail, hasReachedAnyStage } from "../../lib/jobStatus";
 import { JobStageBadges } from "../../components/JobStageBadges";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
@@ -17,36 +21,84 @@ import type { DriverStackParamList } from "../../navigation/DriverNavigator";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "JobDetails">;
 
+// A vertical progress list of the 5 post-acceptance stages — lets a driver
+// see at a glance which one they're on and what's left, instead of only
+// knowing the single next action. Hidden entirely for ASSIGNED (not yet
+// accepted — LIFECYCLE_STEPS starts at ACCEPTED) and FAILED/CANCELLED
+// (a terminal state with nothing left to step through).
+function LifecycleStepper({ job }: { job: Job }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStepperStyles(colors), [colors]);
+  const currentIndex = LIFECYCLE_STEPS.findIndex((s) => s.status === job.status);
+  if (currentIndex === -1) return null;
+
+  return (
+    <View>
+      {LIFECYCLE_STEPS.map((step, i) => {
+        // DELIVERED is both LIFECYCLE_STEPS' last entry and a terminal
+        // status — once reached there's nothing left "in progress", so it
+        // reads as done rather than active.
+        const done = i < currentIndex || (job.status === "DELIVERED" && i === currentIndex);
+        const active = !done && i === currentIndex;
+        return (
+          <View key={step.status} style={styles.row}>
+            <Ionicons
+              name={done ? "checkmark-circle" : active ? "radio-button-on" : "ellipse-outline"}
+              size={20}
+              color={done ? colors.success : active ? colors.primary : colors.textMuted}
+            />
+            <Text style={[styles.label, done && styles.labelDone, active && styles.labelActive]}>{step.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // Reached by tapping a job card in the list ("click to view") — the single
-// place a driver both reviews a job's full details and, for a newly
-// assigned one, accepts it. Accepting is deliberately only possible here,
-// via the swipe gesture below, not a plain tappable button on the card —
-// see JobsScreen.tsx, which no longer renders an Accept button at all.
-export function JobDetailsScreen({ route, navigation }: Props) {
-  const { job } = route.params;
+// place a driver reviews a job's full details and drives it through its
+// entire lifecycle: accepting (via the swipe gesture), every status
+// advance, marking it failed, and navigating to the pickup/dropoff
+// addresses, all without leaving this screen. The job list still has its
+// own copy of the same advance/mark-failed actions (see JobsScreen.tsx) as
+// a shortcut for drivers who'd rather not open each job — both share the
+// same underlying logic via useJobStatusAdvance so they can't drift apart.
+export function JobDetailsScreen({ route }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const [error, setError] = useState<string | null>(null);
+  const [job, setJob] = useState(route.params.job);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
 
+  // useCallback so this stays referentially stable across renders — setJob
+  // itself is already stable, so this never needs to change identity.
+  const onJobUpdated = useCallback((updated: Job) => setJob(updated), []);
+  const statusAdvance = useJobStatusAdvance(onJobUpdated);
+
+  // Kept separate from useJobStatusAdvance's advance() — SwipeToAccept
+  // needs a rejected promise to snap its thumb back for a retry, while
+  // advance() deliberately swallows errors into its own `error` state
+  // instead (right for a plain Button's fire-and-forget onPress, wrong
+  // here). Mirrors the pre-existing Accept flow, just with local `job`
+  // state kept in sync afterward instead of navigating back.
   async function handleAccept() {
-    setError(null);
+    setAcceptError(null);
     try {
       const result = await submitJobStatus(job.id, "ACCEPTED");
       if (!result.sent) {
-        // Stay on this screen instead of navigating back immediately — the
-        // previous behavior called goBack() right after setting this notice,
-        // so it was never actually visible before the screen unmounted. The
-        // driver can back out manually once they've read it.
-        setError("You're offline — this will sync automatically once you're back online.");
+        setAcceptError("You're offline — this will sync automatically once you're back online.");
         return;
       }
-      navigation.goBack();
+      if (result.job) setJob(result.job);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not accept this job. Try again.");
+      setAcceptError(e instanceof ApiError ? e.message : "Could not accept this job. Try again.");
       throw e; // lets SwipeToAccept reset its slider for a retry
     }
   }
+
+  const action = NEXT_ACTION[job.status];
+  const isUpdating = statusAdvance.updatingId === job.id;
+  const isQueued = statusAdvance.queuedIds.has(job.id);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -57,6 +109,13 @@ export function JobDetailsScreen({ route, navigation }: Props) {
         </View>
         <Text style={styles.title}>{job.title}</Text>
         {job.business && <Text style={styles.meta}>Client: {job.business.name}</Text>}
+
+        {LIFECYCLE_STEPS.some((s) => s.status === job.status) && (
+          <Card>
+            <Text style={styles.sectionTitle}>Delivery Progress</Text>
+            <LifecycleStepper job={job} />
+          </Card>
+        )}
 
         <Card>
           <Text style={styles.sectionTitle}>Route</Text>
@@ -103,11 +162,33 @@ export function JobDetailsScreen({ route, navigation }: Props) {
       </ScrollView>
 
       {job.status === "ASSIGNED" && (
-        <View style={[styles.acceptBar, { paddingBottom: spacing.md + insets.bottom }]}>
-          <ErrorText>{error}</ErrorText>
+        <View style={[styles.actionBar, { paddingBottom: spacing.md + insets.bottom }]}>
+          <ErrorText>{acceptError}</ErrorText>
           <SwipeToAccept label="Slide to Accept Job →" completedLabel="Job Accepted" onComplete={handleAccept} />
         </View>
       )}
+
+      {action && job.status !== "ASSIGNED" && (
+        <View style={[styles.actionBar, { paddingBottom: spacing.md + insets.bottom }]}>
+          <ErrorText>{statusAdvance.error}</ErrorText>
+          {statusAdvance.notice && <Text style={styles.notice}>{statusAdvance.notice}</Text>}
+          <Button title={action.label} onPress={() => statusAdvance.advance(job)} loading={isUpdating} disabled={isQueued} />
+          {canFail(job.status) && (
+            <Button
+              title="Mark Failed / Undelivered"
+              variant="danger"
+              onPress={() => statusAdvance.requestMarkFailed(job)}
+              disabled={isQueued || isUpdating}
+            />
+          )}
+        </View>
+      )}
+
+      <FailedDeliveryModal
+        visible={!!statusAdvance.failingJob}
+        onSelect={statusAdvance.submitFailure}
+        onCancel={statusAdvance.cancelMarkFailed}
+      />
     </View>
   );
 }
@@ -128,11 +209,21 @@ function makeStyles(colors: ThemeColors) {
     marginBottom: spacing.sm,
   },
   failureText: { color: colors.danger, fontSize: 14, fontWeight: "600", marginTop: spacing.sm },
-  acceptBar: {
+  notice: { color: colors.primary, fontSize: 13, marginBottom: spacing.sm },
+  actionBar: {
     padding: spacing.md,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  });
+}
+
+function makeStepperStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    row: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 6 },
+    label: { color: colors.textMuted, fontSize: 14 },
+    labelDone: { color: colors.text },
+    labelActive: { color: colors.primary, fontWeight: "700" },
   });
 }

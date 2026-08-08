@@ -1,53 +1,23 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { AppState, FlatList, Pressable, RefreshControl, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import NetInfo from "@react-native-community/netinfo";
 import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../../api/client";
-import { FailureReason, Job, JobStatus } from "../../api/types";
+import { Job, JobStatus } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText } from "../../components/ui";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
-import { capturePhoto } from "../../lib/capturePhoto";
-import { getCoords } from "../../lib/getCoords";
-import { IN_PROGRESS_STATUSES, STATUS_TONE } from "../../lib/jobStatus";
+import { STATUS_TONE, canFail } from "../../lib/jobStatus";
+import { NEXT_ACTION, useJobStatusAdvance } from "../../lib/useJobStatusAdvance";
 import { JobStageBadges } from "../../components/JobStageBadges";
 import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { AddressRow } from "../../components/AddressRow";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
-import { flushQueuedJobUpdates, getQueuedJobIds } from "../../lib/offlineQueue";
-import { submitJobStatus } from "../../lib/submitJobStatus";
-import * as ImagePicker from "expo-image-picker";
+import { flushQueuedJobUpdates } from "../../lib/offlineQueue";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { DriverStackParamList } from "../../navigation/DriverNavigator";
-
-const NEXT_ACTION: Partial<Record<JobStatus, { label: string; next: JobStatus }>> = {
-  ASSIGNED: { label: "Accept Job", next: "ACCEPTED" },
-  ACCEPTED: { label: "Arrived", next: "ARRIVED" },
-  ARRIVED: { label: "Picked Up", next: "PICKED_UP" },
-  PICKED_UP: { label: "On the Way", next: "ON_THE_WAY" },
-  ON_THE_WAY: { label: "Delivered", next: "DELIVERED" },
-};
-
-// Photos are required proof at these two specific transitions — mirrors the
-// clock-in selfie requirement, but with the rear camera (photo of the
-// package/location, not the driver).
-const PHOTO_REQUIRED_ON: Partial<Record<JobStatus, true>> = {
-  PICKED_UP: true,
-  DELIVERED: true,
-};
-
-// A pickup photo only makes sense as proof against an actual pickup
-// location — if dispatch never set one on the job, there's nothing to
-// prove a pickup happened at, so the driver can advance straight through
-// without the camera prompt. Delivery photos stay unconditionally required
-// (every job has at least one dropoff stop). Mirrors the backend's own
-// conditional check in /api/driver/jobs/[id]/status.
-function isPhotoRequired(nextStatus: JobStatus, job: Job): boolean {
-  if (nextStatus === "PICKED_UP") return Boolean(job.pickupAddress);
-  return Boolean(PHOTO_REQUIRED_ON[nextStatus]);
-}
 
 // Statuses a batch action can move several selected jobs into at once — the
 // same restriction the backend enforces (see BATCH_ALLOWED_STATUSES),
@@ -60,12 +30,6 @@ const BATCH_STATUS_LABEL: Partial<Record<JobStatus, string>> = {
   ARRIVED: "Arrived",
   ON_THE_WAY: "Out for Delivery",
 };
-
-// A job can be marked failed from any stage before it's actually delivered —
-// mirrors DRIVER_ALLOWED_TRANSITIONS on the backend.
-function canFail(status: JobStatus): boolean {
-  return IN_PROGRESS_STATUSES.includes(status);
-}
 
 interface JobCardProps {
   item: Job;
@@ -146,9 +110,10 @@ const JobCard = memo(function JobCard({
         {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
         {/* Accepting a job only happens on the Job Details screen now (via
             the swipe-to-accept gesture there), not from a plain button here —
-            see JobDetailsScreen.tsx. Navigation buttons live there too, next
-            to the pickup/dropoff addresses. Every other in-progress action
-            stays on the card. */}
+            see JobDetailsScreen.tsx, which also has the full step-by-step
+            lifecycle and navigation buttons for a driver who wants to work
+            from one screen. Every action here is a shortcut for staying in
+            the list instead. */}
         {action && item.status !== "ASSIGNED" && !selectionMode && (
           <View style={{ marginTop: spacing.sm }}>
             <Button
@@ -193,9 +158,6 @@ export function DriverJobsScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set());
-  const [failingJob, setFailingJob] = useState<Job | null>(null);
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -210,14 +172,24 @@ export function DriverJobsScreen() {
     } finally {
       setInitialLoading(false);
     }
-    setQueuedIds(getQueuedJobIds());
   }, []);
+
+  // Shared with JobDetailsScreen — same photo-capture/offline-queue logic
+  // for advancing a job or marking it failed. This screen just reloads the
+  // whole list on every successful update, same as before extraction.
+  // useCallback (not an inline closure) so this stays referentially stable
+  // across renders — otherwise it'd flow through and give statusAdvance.advance
+  // a new identity on every render, defeating renderItem's/JobCard's memoization.
+  const onJobUpdated = useCallback(() => {
+    load();
+  }, [load]);
+  const statusAdvance = useJobStatusAdvance(onJobUpdated);
 
   const syncQueue = useCallback(async () => {
     await flushQueuedJobUpdates();
-    setQueuedIds(getQueuedJobIds());
+    statusAdvance.refreshQueuedIds();
     await load();
-  }, [load]);
+  }, [load, statusAdvance.refreshQueuedIds]);
 
   useFocusEffect(
     useCallback(() => {
@@ -296,132 +268,6 @@ export function DriverJobsScreen() {
     }
   }
 
-  // Shared by the normal Accept/Arrived/.../Delivered flow and the offline
-  // queue's retry path — delegates the actual send/queue decision to
-  // submitJobStatus (shared with JobDetailsScreen's swipe-to-accept) and
-  // just layers this screen's own UI feedback (the "you're offline" notice,
-  // refreshing queuedIds) on top. useCallback with no deps: every closed-
-  // over setter is stable, so this never needs a new identity — which lets
-  // `advance` below stay stable too.
-  const sendStatusUpdate = useCallback(
-    async (
-      job: Job,
-      status: JobStatus,
-      extra: { photo?: string; lat?: number; lng?: number; failureReason?: FailureReason }
-    ): Promise<boolean> => {
-      const result = await submitJobStatus(job.id, status, extra);
-      if (!result.sent) {
-        setQueuedIds(getQueuedJobIds());
-        setNotice("You're offline — this update is saved and will sync automatically once you're back online.");
-      }
-      return result.sent;
-    },
-    []
-  );
-
-  // Holds a just-captured photo/coords across a failed submit attempt so a
-  // retry doesn't force the driver back through the camera — capturePhoto()
-  // is slow enough on its own (a real photo, resized/compressed at up to 3
-  // quality steps) that discarding it on every transient submit error (a
-  // slow connection, a 409 from another device having already moved the
-  // job on) and forcing a full recapture was the actual "delay, then need
-  // to take another photo" complaint. Keyed by job+target status so it's
-  // never reused for the wrong job or a since-changed transition; cleared
-  // once the attempt is actually handed off (sent live or queued offline).
-  const pendingCaptureRef = useRef<{
-    jobId: string;
-    nextStatus: JobStatus;
-    photo?: string;
-    lat?: number;
-    lng?: number;
-  } | null>(null);
-
-  // Stable across renders (deps are themselves stable) — passed straight
-  // into the memoized JobCard as onAdvance, so tapping one card's action
-  // button doesn't invalidate every other card's memo.
-  const advance = useCallback(
-    async (job: Job) => {
-      const action = NEXT_ACTION[job.status];
-      if (!action) return;
-      // Set before the (possibly slow) camera capture below, not after —
-      // isUpdating disables this job's action button once this is set, so a
-      // fast double-tap while the camera modal is still opening would
-      // otherwise fire a second concurrent submission for the same job.
-      setUpdatingId(job.id);
-      setError(null);
-      setNotice(null);
-
-      try {
-        let photo: string | undefined;
-        let lat: number | undefined;
-        let lng: number | undefined;
-
-        const pending = pendingCaptureRef.current;
-        const reusable = pending && pending.jobId === job.id && pending.nextStatus === action.next;
-
-        if (reusable) {
-          photo = pending.photo;
-          lat = pending.lat;
-          lng = pending.lng;
-        } else if (isPhotoRequired(action.next, job)) {
-          try {
-            const captured = await capturePhoto(ImagePicker.CameraType.back);
-            if (!captured) {
-              const label = action.next === "PICKED_UP" ? "pickup" : "delivery";
-              setError(`A ${label} photo is required to continue.`);
-              return;
-            }
-            photo = captured;
-          } catch (e) {
-            setError(e instanceof Error ? e.message : "Could not open the camera");
-            return;
-          }
-          // Attached as verification metadata alongside the photo — best
-          // effort, a denied/unavailable GPS fix still lets the delivery proceed.
-          const { coords } = await getCoords();
-          if (coords) {
-            lat = coords.lat;
-            lng = coords.lng;
-          }
-          pendingCaptureRef.current = { jobId: job.id, nextStatus: action.next, photo, lat, lng };
-        }
-
-        const sent = await sendStatusUpdate(job, action.next, { photo, lat, lng });
-        // Handed off either way (sent live, or handed to the offline queue) —
-        // nothing left to retry with this same captured photo.
-        pendingCaptureRef.current = null;
-        if (sent) await load();
-      } catch (e) {
-        // Deliberately NOT clearing pendingCaptureRef here — see the comment
-        // above it. Tapping the action again will resubmit with this same
-        // photo instead of reopening the camera.
-        setError(e instanceof ApiError ? e.message : "Could not update job");
-      } finally {
-        setUpdatingId(null);
-      }
-    },
-    [sendStatusUpdate, load]
-  );
-
-  const handleMarkFailed = useCallback((job: Job) => setFailingJob(job), []);
-
-  async function submitFailure(reason: FailureReason) {
-    const job = failingJob;
-    if (!job) return;
-    setFailingJob(null);
-    setError(null);
-    setNotice(null);
-    setUpdatingId(job.id);
-    try {
-      const sent = await sendStatusUpdate(job, "FAILED", { failureReason: reason });
-      if (sent) await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not mark this job failed");
-    } finally {
-      setUpdatingId(null);
-    }
-  }
-
   // Must run on every render, including the initialLoading one below — a
   // hook called only after that early return fires on some renders and not
   // others, which is exactly what triggered "Rendered more hooks than
@@ -433,15 +279,15 @@ export function DriverJobsScreen() {
         item={item}
         selectionMode={selectionMode}
         selected={selectedIds.has(item.id)}
-        isQueued={queuedIds.has(item.id)}
-        isUpdating={updatingId === item.id}
+        isQueued={statusAdvance.queuedIds.has(item.id)}
+        isUpdating={statusAdvance.updatingId === item.id}
         onToggleSelect={toggleSelected}
-        onAdvance={advance}
-        onMarkFailed={handleMarkFailed}
+        onAdvance={statusAdvance.advance}
+        onMarkFailed={statusAdvance.requestMarkFailed}
         onViewDetails={viewDetails}
       />
     ),
-    [selectionMode, selectedIds, queuedIds, updatingId, toggleSelected, advance, handleMarkFailed, viewDetails]
+    [selectionMode, selectedIds, statusAdvance.queuedIds, statusAdvance.updatingId, toggleSelected, statusAdvance.advance, statusAdvance.requestMarkFailed, viewDetails]
   );
 
   if (initialLoading) return <CenteredSpinner />;
@@ -464,8 +310,8 @@ export function DriverJobsScreen() {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={async () => { setLoading(true); await syncQueue(); setLoading(false); }} tintColor={colors.primary} />}
         ListHeaderComponent={
           <View>
-            <ErrorText>{error}</ErrorText>
-            {notice && <Text style={styles.notice}>{notice}</Text>}
+            <ErrorText>{error ?? statusAdvance.error}</ErrorText>
+            {(notice ?? statusAdvance.notice) && <Text style={styles.notice}>{notice ?? statusAdvance.notice}</Text>}
             <View style={styles.selectionToggleRow}>
               <Pressable
                 onPress={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
@@ -494,9 +340,9 @@ export function DriverJobsScreen() {
         </View>
       )}
       <FailedDeliveryModal
-        visible={!!failingJob}
-        onSelect={submitFailure}
-        onCancel={() => setFailingJob(null)}
+        visible={!!statusAdvance.failingJob}
+        onSelect={statusAdvance.submitFailure}
+        onCancel={statusAdvance.cancelMarkFailed}
       />
     </View>
   );

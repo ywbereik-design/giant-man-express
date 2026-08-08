@@ -7,6 +7,26 @@ import { Job, JobStatus } from "../api/types";
 // set, even though each uses it for a different purpose.
 export const IN_PROGRESS_STATUSES: JobStatus[] = ["ACCEPTED", "ARRIVED", "PICKED_UP", "ON_THE_WAY"];
 
+// A job can be marked failed from any stage before it's actually
+// delivered — mirrors DRIVER_ALLOWED_TRANSITIONS on the backend. Shared by
+// the driver job list's per-card action and the Job Details screen's
+// always-visible "Mark Failed" button.
+export function canFail(status: JobStatus): boolean {
+  return IN_PROGRESS_STATUSES.includes(status);
+}
+
+// The full post-acceptance lifecycle, in order — drives the Job Details
+// screen's progress stepper. Doesn't include ASSIGNED (not yet accepted,
+// handled separately by SwipeToAccept) or the terminal DELIVERED/FAILED/
+// CANCELLED states.
+export const LIFECYCLE_STEPS: { status: JobStatus; label: string }[] = [
+  { status: "ACCEPTED", label: "On the way to Pickup" },
+  { status: "ARRIVED", label: "Arrived at Pickup" },
+  { status: "PICKED_UP", label: "Picked Up" },
+  { status: "ON_THE_WAY", label: "On the way to Dropoff" },
+  { status: "DELIVERED", label: "Delivered" },
+];
+
 export const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = {
   ASSIGNED: "info",
   ACCEPTED: "info",
