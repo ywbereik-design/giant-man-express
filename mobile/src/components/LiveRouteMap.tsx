@@ -139,13 +139,11 @@ function buildMapHtml(colors: ThemeColors): string {
 <link rel="stylesheet" href="https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.css" />
 <style>
   html, body, #map { height: 100%; margin: 0; padding: 0; background: ${colors.surfaceAlt}; }
-  .origin-marker {
-    width: 28px; height: 28px; border-radius: 14px;
-    background: ${colors.primary}; border: 2px solid ${colors.primaryText};
+  .car-marker {
+    width: 32px; height: 32px;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
   }
-  .origin-marker-dot { width: 8px; height: 8px; border-radius: 4px; background: ${colors.primaryText}; }
   .dest-marker { font-size: 30px; line-height: 30px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
 </style>
 </head>
@@ -159,11 +157,26 @@ function buildMapHtml(colors: ThemeColors): string {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
+  // Top-down car silhouette (body + windshield + four wheels) instead of a
+  // generic pin — there's no heading data plumbed through from either the
+  // driver's own GPS or the backend's stored last-known position, so this
+  // always points "up" rather than rotating to face the direction of travel.
   var originIcon = L.divIcon({
     className: '',
-    html: '<div class="origin-marker"><div class="origin-marker-dot"></div></div>',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14]
+    html:
+      '<div class="car-marker">' +
+      '<svg width="30" height="30" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M12 2C9 2 8 4 7.5 6L6 11v7a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1h6v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-7l-1.5-5C16 4 15 2 12 2z" ' +
+      'fill="${colors.primary}" stroke="${colors.primaryText}" stroke-width="1"/>' +
+      '<rect x="8" y="6" width="8" height="4" rx="1" fill="${colors.primaryText}" opacity="0.7"/>' +
+      '<circle cx="7.3" cy="8" r="1.3" fill="#1a1a1a"/>' +
+      '<circle cx="16.7" cy="8" r="1.3" fill="#1a1a1a"/>' +
+      '<circle cx="7.3" cy="16" r="1.3" fill="#1a1a1a"/>' +
+      '<circle cx="16.7" cy="16" r="1.3" fill="#1a1a1a"/>' +
+      '</svg>' +
+      '</div>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
   });
   var destIcon = L.divIcon({
     className: '',
@@ -174,6 +187,11 @@ function buildMapHtml(colors: ThemeColors): string {
 
   var originMarker = null;
   var destMarker = null;
+  // Two layers for the route — a wider white "casing" underneath and the
+  // colored line on top — the same technique Google/Apple Maps use so the
+  // route stands out against tiles of any color, rather than a single flat
+  // line that can disappear against a similarly-colored road or park.
+  var routeCasing = null;
   var routeLine = null;
 
   function updateMap(originLat, originLng, hasDest, destLat, destLng, destLabel, originLabel, routeCoords) {
@@ -201,14 +219,38 @@ function buildMapHtml(colors: ThemeColors): string {
       destMarker = null;
     }
 
+    if (routeCasing) {
+      map.removeLayer(routeCasing);
+      routeCasing = null;
+    }
     if (routeLine) {
       map.removeLayer(routeLine);
       routeLine = null;
     }
     if (routeCoords && routeCoords.length > 1) {
-      routeLine = L.polyline(routeCoords, { color: '${colors.primary}', weight: 4 }).addTo(map);
+      routeCasing = L.polyline(routeCoords, {
+        color: '#ffffff',
+        weight: 9,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+      routeLine = L.polyline(routeCoords, {
+        color: '${colors.primary}',
+        weight: 5,
+        opacity: 1,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
       bounds = routeCoords;
     }
+
+    // Markers stay above the route line regardless of add order above —
+    // otherwise a redrawn route (a new polyline instance each update)
+    // would render on top of the existing marker instances and visually
+    // bury the car/pin under the line at intersections.
+    originMarker.bringToFront();
+    if (destMarker) destMarker.bringToFront();
 
     if (bounds.length > 1) {
       map.fitBounds(bounds, { padding: [48, 48] });
