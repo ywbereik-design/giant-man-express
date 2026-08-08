@@ -14,34 +14,35 @@ export async function openAddressInMaps(address: string): Promise<void> {
   }
 }
 
-// Hands a destination address straight to the Google Maps app in
-// turn-by-turn driving mode — deliberately not a coordinate pair: passing
-// the plain address lets Google Maps do its own (better, always up to
-// date) geocoding, so this needs no network call of its own and can't
-// fail the way our free Nominatim/OSRM lookup could.
+// Hands a destination address straight to Google Maps in turn-by-turn
+// driving mode — deliberately not a coordinate pair: passing the plain
+// address lets Google Maps do its own (better, always up to date)
+// geocoding, so this needs no network call of its own and can't fail the
+// way our free Nominatim/OSRM lookup could.
 //
-// Tries Google Maps' own URL scheme first — `google.navigation:` (Android)
-// and `comgooglemaps://` (iOS) are proprietary to the Google Maps app, so
-// opening them launches it directly and starts navigating immediately,
-// with no app-picker dialog and no Apple Maps fallback on iOS. Only if
-// that throws (Google Maps isn't installed) do we fall back to the
-// https://www.google.com/maps/dir/... universal link, which opens Google
-// Maps in the browser instead.
+// On Android, `google.navigation:q=...` is a scheme proprietary to the
+// Google Maps app — opening it launches Google Maps directly in active
+// navigation mode, no app-picker dialog. iOS has no equivalent "start
+// navigating now" intent for Google Maps, so it (and any failure of the
+// Android scheme, e.g. Google Maps not installed) falls back to the
+// https://www.google.com/maps/dir/... universal link, which opens the
+// Google Maps app if installed or the web otherwise.
 export async function openNavigationTo(address: string): Promise<void> {
   const encoded = encodeURIComponent(address);
-  const nativeUrl =
-    Platform.OS === "android"
-      ? `google.navigation:q=${encoded}&mode=d`
-      : `comgooglemaps://?daddr=${encoded}&directionsmode=driving`;
   const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${encoded}&travelmode=driving`;
 
-  try {
-    await Linking.openURL(nativeUrl);
-  } catch {
+  if (Platform.OS === "android") {
     try {
-      await Linking.openURL(webUrl);
+      await Linking.openURL(`google.navigation:q=${encoded}`);
+      return;
     } catch {
-      Alert.alert("Can't open Maps", "This device can't open map links.");
+      // fall through to the web link below
     }
+  }
+
+  try {
+    await Linking.openURL(webUrl);
+  } catch {
+    Alert.alert("Can't open Maps", "This device can't open map links.");
   }
 }

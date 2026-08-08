@@ -9,8 +9,6 @@ import { Badge, Button, Card, CenteredSpinner, ErrorText } from "../../component
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
-import { routeDestination } from "../../lib/routeDestination";
-import { openNavigationTo } from "../../lib/openInMaps";
 import { capturePhoto } from "../../lib/capturePhoto";
 import { getCoords } from "../../lib/getCoords";
 import { IN_PROGRESS_STATUSES, STATUS_TONE } from "../../lib/jobStatus";
@@ -100,7 +98,6 @@ const JobCard = memo(function JobCard({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const action = NEXT_ACTION[item.status];
-  const destination = routeDestination(item);
   // A job with an update already queued offline is excluded from batch
   // selection — its local status is stale (the queue never optimistically
   // updates `jobs`), so a batch action here could apply a second,
@@ -149,13 +146,11 @@ const JobCard = memo(function JobCard({
         {isQueued && <Text style={styles.queuedText}>Queued — will sync automatically once you're online.</Text>}
         {/* Accepting a job only happens on the Job Details screen now (via
             the swipe-to-accept gesture there), not from a plain button here —
-            see JobDetailsScreen.tsx. Every other in-progress action stays on
-            the card. */}
+            see JobDetailsScreen.tsx. Navigation buttons live there too, next
+            to the pickup/dropoff addresses. Every other in-progress action
+            stays on the card. */}
         {action && item.status !== "ASSIGNED" && !selectionMode && (
           <View style={{ marginTop: spacing.sm }}>
-            {destination && (
-              <Button title="Start Navigation" onPress={() => openNavigationTo(destination.address)} />
-            )}
             <Button
               title={action.label}
               onPress={() => onAdvance(item)}

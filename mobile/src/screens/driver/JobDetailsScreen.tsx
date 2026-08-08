@@ -3,10 +3,11 @@ import { ScrollView, Text, View, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { ApiError } from "../../api/client";
-import { Badge, Card, ErrorText } from "../../components/ui";
+import { Badge, Button, Card, ErrorText } from "../../components/ui";
 import { AddressRow } from "../../components/AddressRow";
 import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { SwipeToAccept } from "../../components/SwipeToAccept";
+import { openNavigationTo } from "../../lib/openInMaps";
 import { submitJobStatus } from "../../lib/submitJobStatus";
 import { STATUS_TONE, hasReachedAnyStage } from "../../lib/jobStatus";
 import { JobStageBadges } from "../../components/JobStageBadges";
@@ -60,16 +61,21 @@ export function JobDetailsScreen({ route, navigation }: Props) {
         <Card>
           <Text style={styles.sectionTitle}>Route</Text>
           {job.pickupAddress ? (
-            <AddressRow label="Pickup: " address={job.pickupAddress} />
+            <View style={styles.routeSection}>
+              <AddressRow label="Pickup: " address={job.pickupAddress} />
+              <Button title="Navigate to Pickup" onPress={() => openNavigationTo(job.pickupAddress!)} />
+            </View>
           ) : (
             <Text style={styles.meta}>No pickup address on file.</Text>
           )}
           {job.dropoffStops.map((stop, i) => (
-            <AddressRow
-              key={stop.id}
-              label={job.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "}
-              address={stop.address}
-            />
+            <View key={stop.id} style={styles.routeSection}>
+              <AddressRow label={job.dropoffStops.length > 1 ? `Stop ${i + 1}: ` : "Dropoff: "} address={stop.address} />
+              <Button
+                title={job.dropoffStops.length > 1 ? `Navigate to Stop ${i + 1}` : "Navigate to Dropoff"}
+                onPress={() => openNavigationTo(stop.address)}
+              />
+            </View>
           ))}
         </Card>
 
@@ -112,6 +118,7 @@ function makeStyles(colors: ThemeColors) {
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
   title: { color: colors.text, fontSize: 20, fontWeight: "700", marginBottom: spacing.xs },
   meta: { color: colors.textMuted, fontSize: 14, marginTop: 2 },
+  routeSection: { marginBottom: spacing.sm },
   sectionTitle: {
     color: colors.textMuted,
     fontSize: 12,
