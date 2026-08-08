@@ -37,6 +37,7 @@ export function DriverTabSegmentBar({
             onPress={() => onSelect(tab.key)}
             accessibilityRole="button"
             accessibilityState={focused ? { selected: true } : {}}
+            accessibilityLabel={tab.label}
             style={[styles.segment, focused && styles.segmentActive]}
           >
             <Ionicons name={focused ? tab.icon : tab.iconOutline} size={18} color={color} />

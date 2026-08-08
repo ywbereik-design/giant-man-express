@@ -32,7 +32,13 @@ const LocationRow = memo(function LocationRow({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Card>
-      <Pressable style={styles.row} onPress={() => onToggleExpand(item)}>
+      <Pressable
+        style={styles.row}
+        onPress={() => onToggleExpand(item)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={`${item.name}. ${(item.todayDistanceKm ?? 0).toFixed(1)} km today. ${item.clockedIn ? "Clocked in" : "Clocked out"}`}
+      >
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{item.name}</Text>
           <Text style={styles.meta}>{(item.todayDistanceKm ?? 0).toFixed(1)} km today</Text>

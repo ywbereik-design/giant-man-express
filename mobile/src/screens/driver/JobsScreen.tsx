@@ -517,7 +517,11 @@ export function DriverJobsScreen() {
             <ErrorText>{error}</ErrorText>
             {notice && <Text style={styles.notice}>{notice}</Text>}
             <View style={styles.selectionToggleRow}>
-              <Pressable onPress={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}>
+              <Pressable
+                onPress={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
+                accessibilityRole="button"
+                accessibilityLabel={selectionMode ? "Cancel Selection" : "Select Multiple"}
+              >
                 <Text style={styles.selectionToggleText}>{selectionMode ? "Cancel Selection" : "Select Multiple"}</Text>
               </Pressable>
             </View>

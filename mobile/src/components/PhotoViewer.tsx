@@ -10,6 +10,11 @@ interface Props {
   // shown as an overlay on the full-screen view, not burned into the image
   // itself, so it stays trustworthy (server-recorded, not editable pixels).
   caption?: string;
+  // What this photo is, for a screen reader — e.g. "Pickup photo", "Clock-in
+  // selfie". Deliberately separate from `caption`: that's precise GPS
+  // coordinates and a timestamp, not something worth reading aloud as the
+  // thumbnail's name.
+  label?: string;
 }
 
 // Tap-to-expand photo thumbnail — self-contained (manages its own
@@ -19,14 +24,14 @@ interface Props {
 // (up to two per job card) — its own uri/size/caption props rarely change
 // once a job's photos are set, so there's no reason to re-decode on every
 // unrelated re-render of its parent.
-export const PhotoThumbnail = memo(function PhotoThumbnail({ uri, size = 56, caption }: Props) {
+export const PhotoThumbnail = memo(function PhotoThumbnail({ uri, size = 56, caption, label = "Photo" }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [viewing, setViewing] = useState(false);
 
   return (
     <>
-      <Pressable onPress={() => setViewing(true)}>
+      <Pressable onPress={() => setViewing(true)} accessibilityRole="imagebutton" accessibilityLabel={`View ${label.toLowerCase()}`}>
         <Image
           source={{ uri }}
           style={[styles.thumbnail, { width: size, height: size }]}

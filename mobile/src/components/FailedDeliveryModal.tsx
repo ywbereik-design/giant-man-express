@@ -44,11 +44,17 @@ export function FailedDeliveryModal({ visible, onSelect, onCancel }: Props) {
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>Why did this delivery fail?</Text>
           {FAILURE_REASONS.map((reason) => (
-            <Pressable key={reason} style={styles.reasonRow} onPress={() => onSelect(reason)}>
+            <Pressable
+              key={reason}
+              style={styles.reasonRow}
+              onPress={() => onSelect(reason)}
+              accessibilityRole="button"
+              accessibilityLabel={reason}
+            >
               <Text style={styles.reasonText}>{reason}</Text>
             </Pressable>
           ))}
-          <Pressable style={styles.cancelRow} onPress={onCancel}>
+          <Pressable style={styles.cancelRow} onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel">
             <Text style={styles.cancelText}>Cancel</Text>
           </Pressable>
         </Pressable>

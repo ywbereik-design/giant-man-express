@@ -26,7 +26,13 @@ export function LogoutButton({ warningMessage }: Props = {}) {
   }
 
   return (
-    <Pressable onPress={confirmLogout} hitSlop={12} style={{ marginRight: 16 }}>
+    <Pressable
+      onPress={confirmLogout}
+      hitSlop={12}
+      style={{ marginRight: 16 }}
+      accessibilityRole="button"
+      accessibilityLabel="Log Out"
+    >
       <Text style={{ color: colors.primary, fontWeight: "600" }}>Log Out</Text>
     </Pressable>
   );

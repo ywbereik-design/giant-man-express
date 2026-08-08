@@ -24,7 +24,13 @@ export function AddressRow({ label, address }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <Pressable style={styles.row} onPress={() => openAddressInMaps(address)} hitSlop={4}>
+    <Pressable
+      style={styles.row}
+      onPress={() => openAddressInMaps(address)}
+      hitSlop={4}
+      accessibilityRole="link"
+      accessibilityLabel={`${label}${address}. Open in Maps`}
+    >
       <Ionicons name="location" size={13} color={colors.textMuted} />
       <Text style={styles.text}>
         {label}

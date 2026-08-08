@@ -29,11 +29,11 @@ export function ChangePinCard() {
   return (
     <Card>
       <Label>Current PIN</Label>
-      <FieldInput value={form.current} onChangeText={form.setCurrent} secureTextEntry keyboardType="number-pad" />
+      <FieldInput value={form.current} onChangeText={form.setCurrent} secureTextEntry keyboardType="number-pad" maxLength={8} />
       <Label>New PIN (4-8 digits)</Label>
-      <FieldInput value={form.next} onChangeText={form.setNext} secureTextEntry keyboardType="number-pad" />
+      <FieldInput value={form.next} onChangeText={form.setNext} secureTextEntry keyboardType="number-pad" maxLength={8} />
       <Label>Confirm New PIN</Label>
-      <FieldInput value={form.confirm} onChangeText={form.setConfirm} secureTextEntry keyboardType="number-pad" />
+      <FieldInput value={form.confirm} onChangeText={form.setConfirm} secureTextEntry keyboardType="number-pad" maxLength={8} />
       <ErrorText>{form.error}</ErrorText>
       <Button title="Save New PIN" onPress={form.submit} loading={form.saving} />
       <Button title="Cancel" variant="secondary" onPress={form.toggleOpen} disabled={form.saving} />

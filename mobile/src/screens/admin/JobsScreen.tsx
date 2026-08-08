@@ -130,14 +130,22 @@ const JobRow = memo(function JobRow({
               {photos.pickupPhoto && (
                 <View style={styles.photoCol}>
                   <Text style={styles.photoLabel}>Pickup</Text>
-                  <PhotoThumbnail uri={photos.pickupPhoto} caption={photoCaption(photos.pickupLat, photos.pickupLng, item.pickedUpAt)} />
+                  <PhotoThumbnail
+                    uri={photos.pickupPhoto}
+                    caption={photoCaption(photos.pickupLat, photos.pickupLng, item.pickedUpAt)}
+                    label="Pickup photo"
+                  />
                   <Button title="Delete" variant="danger" onPress={() => confirmDeletePhoto("pickup")} loading={deletingType === "pickup"} />
                 </View>
               )}
               {photos.deliveryPhoto && (
                 <View style={styles.photoCol}>
                   <Text style={styles.photoLabel}>Delivery</Text>
-                  <PhotoThumbnail uri={photos.deliveryPhoto} caption={photoCaption(photos.deliveryLat, photos.deliveryLng, item.deliveredAt)} />
+                  <PhotoThumbnail
+                    uri={photos.deliveryPhoto}
+                    caption={photoCaption(photos.deliveryLat, photos.deliveryLng, item.deliveredAt)}
+                    label="Delivery photo"
+                  />
                   <Button title="Delete" variant="danger" onPress={() => confirmDeletePhoto("delivery")} loading={deletingType === "delivery"} />
                 </View>
               )}

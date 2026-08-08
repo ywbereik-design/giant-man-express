@@ -152,7 +152,6 @@ export function DriverLiveMap({ driverId }: Props) {
       destination={destination}
       destinationLabel={destinationLabel ?? "Destination"}
       originTitle="Driver"
-      height={280}
       timePrecision="now"
       onDirectionsReady={setEtaMinutes}
       overlay={

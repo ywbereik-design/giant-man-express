@@ -125,6 +125,7 @@ export function LoginScreen() {
                 value={employeeCode}
                 onChangeText={setEmployeeCode}
                 autoCapitalize="characters"
+                maxLength={20}
                 placeholder="e.g. E1024"
               />
               <Label>PIN</Label>
@@ -133,6 +134,7 @@ export function LoginScreen() {
                 onChangeText={setPin}
                 secureTextEntry
                 keyboardType="number-pad"
+                maxLength={8}
                 placeholder="••••"
               />
             </>

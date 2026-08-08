@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,6 +8,14 @@ import { useTheme } from "../theme/ThemeContext";
 import { GOOGLE_MAPS_API_KEY, LatLng } from "../lib/googleMaps";
 
 export const MAP_EDGE_PADDING = { top: 48, right: 48, bottom: 48, left: 48 };
+
+// Bounds for the adaptive height below — proportional to the screen instead
+// of a fixed pixel value, so the map reads about the same size on a small
+// phone and a tablet, but never gets cramped (MIN) or absurdly tall (MAX)
+// at either extreme.
+const MIN_MAP_HEIGHT = 220;
+const MAX_MAP_HEIGHT = 340;
+const MAP_HEIGHT_FRACTION = 0.32;
 
 export function toMapRegion(point: LatLng) {
   return { ...point, latitudeDelta: 0.05, longitudeDelta: 0.05 };
@@ -18,8 +26,8 @@ export interface LiveRouteMapProps {
   destination: LatLng;
   destinationLabel: string;
   originTitle?: string;
-  // DriverLiveMap uses a taller wrapper (room for the ETA badge overlay);
-  // DriverRouteMap uses the default.
+  // Defaults to a screen-proportional height (see MAP_HEIGHT_FRACTION) —
+  // only pass this to override that for a specific layout.
   height?: number;
   // Only DriverLiveMap (monitoring a third party) asks the Directions API
   // for a traffic-aware duration — a driver's own route doesn't need one.
@@ -43,13 +51,16 @@ export function LiveRouteMap({
   destination,
   destinationLabel,
   originTitle = "You",
-  height = 260,
+  height,
   timePrecision,
   onDirectionsReady,
   overlay,
 }: LiveRouteMapProps) {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, height), [colors, height]);
+  const { height: windowHeight } = useWindowDimensions();
+  const resolvedHeight =
+    height ?? Math.round(Math.min(MAX_MAP_HEIGHT, Math.max(MIN_MAP_HEIGHT, windowHeight * MAP_HEIGHT_FRACTION)));
+  const styles = useMemo(() => makeStyles(colors, resolvedHeight), [colors, resolvedHeight]);
   const mapRef = useRef<MapView>(null);
 
   return (

@@ -69,6 +69,8 @@ export function AddressAutocompleteInput({ value, onChangeText, ...rest }: Props
               key={s.placeId}
               style={[styles.row, i > 0 && styles.rowDivider]}
               onPress={() => selectSuggestion(s.description)}
+              accessibilityRole="button"
+              accessibilityLabel={s.description}
             >
               <Text style={styles.rowText} numberOfLines={2}>
                 {s.description}

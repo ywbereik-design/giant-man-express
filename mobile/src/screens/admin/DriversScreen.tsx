@@ -81,6 +81,7 @@ const DriverRow = memo(function DriverRow({
           onChangeText={onEditPinChange}
           keyboardType="number-pad"
           secureTextEntry
+          maxLength={8}
           placeholder="New 4-8 digit PIN"
           accessibilityLabel="Reset PIN"
         />
@@ -131,7 +132,7 @@ const DriverRow = memo(function DriverRow({
       )}
       {item.clockedIn && item.clockInPhoto && (
         <View style={styles.photoRow}>
-          <PhotoThumbnail uri={item.clockInPhoto} size={44} />
+          <PhotoThumbnail uri={item.clockInPhoto} size={44} label="Clock-in selfie" />
           <Text style={styles.meta}>Clocked in {item.clockInAt ? formatTime(item.clockInAt) : ""}</Text>
         </View>
       )}
@@ -185,11 +186,14 @@ export function DriversScreen() {
   const [editPin, setEditPin] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await api.get<{ drivers: Driver[] }>("/api/drivers");
+      const res = await api.get<{ drivers: Driver[]; nextCursor: string | null }>("/api/drivers");
       setDrivers(res.drivers);
+      setNextCursor(res.nextCursor);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load drivers");
     } finally {
@@ -202,6 +206,22 @@ export function DriversScreen() {
       load();
     }, [load])
   );
+
+  async function loadMoreDrivers() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await api.get<{ drivers: Driver[]; nextCursor: string | null }>(
+        `/api/drivers?cursor=${encodeURIComponent(nextCursor)}`
+      );
+      setDrivers((prev) => [...prev, ...res.drivers]);
+      setNextCursor(res.nextCursor);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not load more drivers");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   async function addDriver() {
     setError(null);
@@ -219,7 +239,7 @@ export function DriversScreen() {
     }
     setSaving(true);
     try {
-      await api.post("/api/drivers", {
+      const res = await api.post<{ driver: Driver }>("/api/drivers", {
         name: name.trim(),
         employeeCode: employeeCode.trim(),
         pin: pin.trim(),
@@ -229,7 +249,11 @@ export function DriversScreen() {
       setEmployeeCode("");
       setPin("");
       setPhone("");
-      await load();
+      // Insert locally (re-sorted by name, matching the server's own order)
+      // instead of calling load() — a full reload re-fetches only the first
+      // page, silently dropping any extra pages already pulled in via "Load
+      // More".
+      setDrivers((prev) => [...prev, res.driver].sort((a, b) => a.name.localeCompare(b.name)));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not add driver");
     } finally {
@@ -237,20 +261,21 @@ export function DriversScreen() {
     }
   }
 
-  const toggleActive = useCallback(
-    async (driver: Driver) => {
-      setTogglingId(driver.id);
-      try {
-        await api.patch(`/api/drivers/${driver.id}`, { active: !driver.active });
-        await load();
-      } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Could not update driver");
-      } finally {
-        setTogglingId(null);
-      }
-    },
-    [load]
-  );
+  const toggleActive = useCallback(async (driver: Driver) => {
+    setTogglingId(driver.id);
+    try {
+      const res = await api.patch<{ driver: Driver }>(`/api/drivers/${driver.id}`, { active: !driver.active });
+      // Merge the patched fields into the existing row instead of calling
+      // load() — the PATCH response doesn't include the computed
+      // clockedIn/todayDistanceKm/etc. fields a full list fetch does, and a
+      // full reload would also reset pagination to the first page.
+      setDrivers((prev) => prev.map((d) => (d.id === res.driver.id ? { ...d, ...res.driver } : d)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not update driver");
+    } finally {
+      setTogglingId(null);
+    }
+  }, []);
 
   // Only the deactivating direction needs a confirmation — reactivating just
   // restores access and isn't destructive.
@@ -268,24 +293,21 @@ export function DriversScreen() {
     [toggleActive]
   );
 
-  const deleteDriver = useCallback(
-    async (driver: Driver) => {
-      setDeletingId(driver.id);
-      setError(null);
-      try {
-        await api.delete(`/api/drivers/${driver.id}`);
-        await load();
-      } catch (e) {
-        // The backend refuses (409) if this driver has any job/shift/report
-        // history — that message ("...deactivate them instead") is exactly
-        // what should surface here, not a generic fallback.
-        setError(e instanceof ApiError ? e.message : "Could not delete driver");
-      } finally {
-        setDeletingId(null);
-      }
-    },
-    [load]
-  );
+  const deleteDriver = useCallback(async (driver: Driver) => {
+    setDeletingId(driver.id);
+    setError(null);
+    try {
+      await api.delete(`/api/drivers/${driver.id}`);
+      setDrivers((prev) => prev.filter((d) => d.id !== driver.id));
+    } catch (e) {
+      // The backend refuses (409) if this driver has any job/shift/report
+      // history — that message ("...deactivate them instead") is exactly
+      // what should surface here, not a generic fallback.
+      setError(e instanceof ApiError ? e.message : "Could not delete driver");
+    } finally {
+      setDeletingId(null);
+    }
+  }, []);
 
   const confirmDeleteDriver = useCallback(
     (driver: Driver) => {
@@ -328,20 +350,27 @@ export function DriversScreen() {
       }
       setEditSaving(true);
       try {
-        await api.patch(`/api/drivers/${driver.id}`, {
+        const res = await api.patch<{ driver: Driver }>(`/api/drivers/${driver.id}`, {
           name: editName.trim(),
           phone: editPhone.trim() || undefined,
           ...(editPin.trim() ? { pin: editPin.trim() } : {}),
         });
         setEditingId(null);
-        await load();
+        // Merge instead of load() — same reasoning as toggleActive above:
+        // preserve the computed fields PATCH doesn't return, and don't reset
+        // pagination.
+        setDrivers((prev) =>
+          prev
+            .map((d) => (d.id === res.driver.id ? { ...d, ...res.driver } : d))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
       } catch (e) {
         setEditError(e instanceof ApiError ? e.message : "Could not save changes");
       } finally {
         setEditSaving(false);
       }
     },
-    [editName, editPhone, editPin, load]
+    [editName, editPhone, editPin]
   );
 
   const renderItem = useCallback(
@@ -405,9 +434,22 @@ export function DriversScreen() {
               <Label>Full Name</Label>
               <FieldInput value={name} onChangeText={setName} placeholder="Jasdeep Singh" />
               <Label>Employee Code</Label>
-              <FieldInput value={employeeCode} onChangeText={setEmployeeCode} autoCapitalize="characters" placeholder="D001" />
+              <FieldInput
+                value={employeeCode}
+                onChangeText={setEmployeeCode}
+                autoCapitalize="characters"
+                maxLength={20}
+                placeholder="D001"
+              />
               <Label>PIN (4-8 digits)</Label>
-              <FieldInput value={pin} onChangeText={setPin} keyboardType="number-pad" secureTextEntry placeholder="1234" />
+              <FieldInput
+                value={pin}
+                onChangeText={setPin}
+                keyboardType="number-pad"
+                secureTextEntry
+                maxLength={8}
+                placeholder="1234"
+              />
               <Label>Phone (optional)</Label>
               <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />
               <ErrorText>{error}</ErrorText>
@@ -420,6 +462,13 @@ export function DriversScreen() {
         )
       }
       ListEmptyComponent={!error ? <Text style={styles.empty}>No drivers yet.</Text> : null}
+      ListFooterComponent={
+        nextCursor ? (
+          <View style={{ marginTop: spacing.sm }}>
+            <Button title="Load More" variant="secondary" onPress={loadMoreDrivers} loading={loadingMore} />
+          </View>
+        ) : null
+      }
       renderItem={renderItem}
     />
     </KeyboardAvoidingView>

@@ -28,7 +28,7 @@ const SelfieRow = memo(function SelfieRow({
     <Card>
       <View style={styles.row}>
         {item.clockInPhoto ? (
-          <PhotoThumbnail uri={item.clockInPhoto} />
+          <PhotoThumbnail uri={item.clockInPhoto} label="Clock-in selfie" />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailEmpty]}>
             <Text style={styles.thumbnailEmptyText}>N/A</Text>

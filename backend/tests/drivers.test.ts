@@ -1,8 +1,43 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/lib/db";
+import { GET as listDrivers } from "@/app/api/drivers/route";
 import { PATCH as updateDriver, DELETE as deleteDriver } from "@/app/api/drivers/[id]/route";
 import { GET as driverStatus } from "@/app/api/driver/status/route";
 import { createStaff, createDriver, createJobType, createJob, tokenFor, jsonRequest, getRequest } from "./helpers";
+
+describe("GET /api/drivers", () => {
+  // The test DB is only truncated once per whole `vitest run`, so other
+  // tests may have already created plenty of driver rows by the time this
+  // runs — rather than guess a fixed number of pages, derive the expected
+  // total from an unpaginated fetch first, so the loop bound (and the
+  // final coverage check) is exact regardless of what else has run.
+  it("pages through the full driver list with cursor+limit, covering every driver exactly once", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+    await Promise.all([createDriver(), createDriver(), createDriver()]);
+
+    const full = await (await listDrivers(getRequest("/api/drivers?limit=100", token))).json();
+    const allIds = new Set<string>(full.drivers.map((d: { id: string }) => d.id));
+    expect(allIds.size).toBeGreaterThanOrEqual(3);
+
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const res = await listDrivers(getRequest(`/api/drivers?limit=1${cursor ? `&cursor=${cursor}` : ""}`, token));
+      const body = await res.json();
+      expect(body.drivers.length).toBeLessThanOrEqual(1);
+      for (const d of body.drivers) {
+        expect(seen.has(d.id)).toBe(false);
+        seen.add(d.id);
+      }
+      cursor = body.nextCursor ?? undefined;
+      pages++;
+    } while (cursor && pages <= allIds.size + 5);
+
+    expect(seen).toEqual(allIds);
+  });
+});
 
 describe("PATCH /api/drivers/[id]", () => {
   it("invalidates the driver's existing token when an admin resets their PIN", async () => {

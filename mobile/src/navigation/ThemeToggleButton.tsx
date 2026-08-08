@@ -15,6 +15,7 @@ export function ThemeToggleButton() {
       onPress={toggle}
       hitSlop={12}
       style={{ marginRight: 16 }}
+      accessibilityRole="button"
       accessibilityLabel={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
       <Ionicons name={mode === "dark" ? "moon" : "sunny"} size={20} color={colors.text} />

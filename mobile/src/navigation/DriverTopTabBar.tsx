@@ -35,6 +35,7 @@ export function DriverTopTabBar({
           onPress={() => navigation.getParent()?.goBack()}
           hitSlop={12}
           style={styles.backButton}
+          accessibilityRole="button"
           accessibilityLabel="Back to Welcome"
         >
           <Ionicons name="chevron-back" size={22} color={colors.text} />

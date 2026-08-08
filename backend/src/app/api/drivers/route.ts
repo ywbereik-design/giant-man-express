@@ -6,6 +6,7 @@ import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 import { roundKm, startOfTodayUTC } from "@/lib/geo";
 import { PHONE_PATTERN, SHIFT_PHOTO_EXPIRY_MS } from "@/lib/constants";
+import { parsePaginationParams, buildPage } from "@/lib/pagination";
 
 export async function GET(req: NextRequest) {
   // Dispatch gets read-only access here — they need the driver list to
@@ -29,47 +30,59 @@ export async function GET(req: NextRequest) {
   const dayStart = startOfTodayUTC();
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
-  const [drivers, openEntries, todaysEntries] = await Promise.all([
-    prisma.driver.findMany({
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        employeeCode: true,
-        phone: true,
-        active: true,
-        createdAt: true,
-        currentLat: true,
-        currentLng: true,
-        currentLocationAt: true,
-      },
-    }),
-    prisma.timeEntry.findMany({
-      where: { clockOutAt: null },
-      select: { driverId: true, clockInAt: true, clockInPhoto: true },
-    }),
-    prisma.timeEntry.findMany({
-      where: {
-        clockInAt: { lt: dayEnd },
-        OR: [{ clockOutAt: null }, { clockOutAt: { gte: dayStart } }],
-      },
-      select: { driverId: true, distanceKm: true },
-    }),
-  ]);
+  const { searchParams } = new URL(req.url);
+  const { cursor, limit } = parsePaginationParams(searchParams, 50, 100);
 
-  // Each driver's most recently created not-yet-finished job — what stage of
-  // the Accept -> Arrived -> Picked Up -> On the Way -> Delivered flow
-  // they're currently on, for admin/dispatch to see at a glance without
-  // opening the Jobs screen. A driver could in principle have more than one
-  // active job at once; this surfaces the latest one, not all of them.
-  const activeJobs = drivers.length
-    ? await prisma.job.findMany({
-        where: { driverId: { in: drivers.map((d) => d.id) }, status: { notIn: ["DELIVERED", "CANCELLED"] } },
-        orderBy: { createdAt: "desc" },
-        distinct: ["driverId"],
-        select: { driverId: true, id: true, title: true, status: true },
-      })
-    : [];
+  const rows = await prisma.driver.findMany({
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: {
+      id: true,
+      name: true,
+      employeeCode: true,
+      phone: true,
+      active: true,
+      createdAt: true,
+      currentLat: true,
+      currentLng: true,
+      currentLocationAt: true,
+    },
+  });
+  const { items: drivers, nextCursor } = buildPage(rows, limit);
+  const driverIds = drivers.map((d) => d.id);
+
+  const [openEntries, todaysEntries, activeJobs] = await Promise.all([
+    driverIds.length
+      ? prisma.timeEntry.findMany({
+          where: { driverId: { in: driverIds }, clockOutAt: null },
+          select: { driverId: true, clockInAt: true, clockInPhoto: true },
+        })
+      : [],
+    driverIds.length
+      ? prisma.timeEntry.findMany({
+          where: {
+            driverId: { in: driverIds },
+            clockInAt: { lt: dayEnd },
+            OR: [{ clockOutAt: null }, { clockOutAt: { gte: dayStart } }],
+          },
+          select: { driverId: true, distanceKm: true },
+        })
+      : [],
+    // Each driver's most recently created not-yet-finished job — what stage
+    // of the Accept -> Arrived -> Picked Up -> On the Way -> Delivered flow
+    // they're currently on, for admin/dispatch to see at a glance without
+    // opening the Jobs screen. A driver could in principle have more than one
+    // active job at once; this surfaces the latest one, not all of them.
+    driverIds.length
+      ? prisma.job.findMany({
+          where: { driverId: { in: driverIds }, status: { notIn: ["DELIVERED", "CANCELLED"] } },
+          orderBy: { createdAt: "desc" },
+          distinct: ["driverId"],
+          select: { driverId: true, id: true, title: true, status: true },
+        })
+      : [],
+  ]);
 
   const openEntryByDriver = new Map(openEntries.map((e) => [e.driverId, e]));
   const todayDistanceByDriver = new Map<string, number>();
@@ -96,6 +109,7 @@ export async function GET(req: NextRequest) {
         currentJobStatus: activeJob?.status ?? null,
       };
     }),
+    nextCursor,
   });
 }
 
