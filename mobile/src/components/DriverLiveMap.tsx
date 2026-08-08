@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import MapView, { PROVIDER_GOOGLE, Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import { api, ApiError } from "../api/client";
 import { Job, DriverLocationDetail } from "../api/types";
 import { spacing, ThemeColors } from "../theme/theme";
 import { useTheme } from "../theme/ThemeContext";
-import { GOOGLE_MAPS_API_KEY, LatLng, geocodeAddress } from "../lib/googleMaps";
+import { LatLng, geocodeAddress } from "../lib/osm";
 import { routeDestination } from "../lib/routeDestination";
 import { IN_PROGRESS_STATUSES } from "../lib/jobStatus";
-import { LiveRouteMap, MapFallback, toMapRegion } from "./LiveRouteMap";
+import { LiveRouteMap, MapFallback } from "./LiveRouteMap";
 
 // Foreground-only polling while a dispatcher/admin has this driver expanded
 // on screen — matches the app's existing client-pull architecture (no
@@ -23,9 +22,8 @@ interface Props {
 
 // Third-party version of DriverRouteMap: instead of watching the device's
 // own GPS, polls the backend for this OTHER driver's last-known position
-// and their current active job, then draws the same live route + Google
-// Directions/traffic-aware ETA between the two (see LiveRouteMap, shared by
-// both).
+// and their current active job, then draws the same live route + ETA
+// between the two (see LiveRouteMap, shared by both).
 export function DriverLiveMap({ driverId }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -99,14 +97,6 @@ export function DriverLiveMap({ driverId }: Props) {
     };
   }, [driverId]);
 
-  if (!GOOGLE_MAPS_API_KEY) {
-    return (
-      <MapFallback>
-        <Text style={styles.fallbackText}>Map unavailable (no Google Maps API key configured).</Text>
-      </MapFallback>
-    );
-  }
-
   if (error) {
     return (
       <MapFallback>
@@ -125,12 +115,12 @@ export function DriverLiveMap({ driverId }: Props) {
 
   if (noActiveJob) {
     return (
-      <MapFallback>
-        <Text style={styles.fallbackText}>Driver's last known position — no active job to route to right now.</Text>
-        <MapView provider={PROVIDER_GOOGLE} style={styles.soloMap} initialRegion={toMapRegion(origin)}>
-          <Marker coordinate={origin} title="Driver" />
-        </MapView>
-      </MapFallback>
+      <View>
+        <MapFallback>
+          <Text style={styles.fallbackText}>Driver's last known position — no active job to route to right now.</Text>
+        </MapFallback>
+        <LiveRouteMap origin={origin} originTitle="Driver" />
+      </View>
     );
   }
 
@@ -152,13 +142,12 @@ export function DriverLiveMap({ driverId }: Props) {
       destination={destination}
       destinationLabel={destinationLabel ?? "Destination"}
       originTitle="Driver"
-      timePrecision="now"
       onDirectionsReady={setEtaMinutes}
       overlay={
         etaMinutes != null && (
           <View style={styles.etaBadge}>
             <Ionicons name="time" size={14} color={colors.primaryText} />
-            <Text style={styles.etaText}>{etaMinutes} min (traffic-aware)</Text>
+            <Text style={styles.etaText}>{etaMinutes} min</Text>
           </View>
         )
       }
@@ -168,11 +157,6 @@ export function DriverLiveMap({ driverId }: Props) {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    soloMap: {
-      height: 180,
-      borderRadius: 12,
-      marginTop: spacing.sm,
-    },
     etaBadge: {
       position: "absolute",
       top: spacing.sm,

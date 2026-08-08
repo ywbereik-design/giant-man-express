@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInputProps, View, StyleSheet } from "react-native";
 import { FieldInput } from "./ui";
-import { AddressSuggestion, fetchAddressSuggestions } from "../lib/googleMaps";
+import { AddressSuggestion, fetchAddressSuggestions } from "../lib/osm";
 import { spacing, ThemeColors } from "../theme/theme";
 import { useTheme } from "../theme/ThemeContext";
 
@@ -10,15 +10,18 @@ interface Props extends Omit<TextInputProps, "value" | "onChangeText"> {
   onChangeText: (text: string) => void;
 }
 
-const DEBOUNCE_MS = 300;
+// A little more conservative than a typical 300ms debounce — Nominatim's
+// (free, keyless) usage policy asks for roughly no more than 1 request/sec,
+// and this only fires once per pause in typing anyway, not per keystroke.
+const DEBOUNCE_MS = 500;
 
-// A plain FieldInput with a live Google Places dropdown underneath — unlike
-// the Business/Driver ChipSelect pickers (a small, fixed, pre-loaded list),
-// an address has no fixed set of valid values, so this queries Google on
-// every keystroke (debounced) instead. Selecting a suggestion fills the
-// field with its full formatted address; typing without ever selecting one
-// still works exactly like a plain FieldInput — this only ever offers to
-// autocomplete, it never blocks free text.
+// A plain FieldInput with a live OpenStreetMap (Nominatim) address dropdown
+// underneath — unlike the Business/Driver ChipSelect pickers (a small,
+// fixed, pre-loaded list), an address has no fixed set of valid values, so
+// this queries Nominatim on every keystroke (debounced) instead. Selecting
+// a suggestion fills the field with its full formatted address; typing
+// without ever selecting one still works exactly like a plain FieldInput —
+// this only ever offers to autocomplete, it never blocks free text.
 export function AddressAutocompleteInput({ value, onChangeText, ...rest }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);

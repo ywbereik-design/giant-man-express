@@ -19,8 +19,8 @@ function withWhatsAppQuery(config) {
   });
 }
 
-// Dynamic config (not static app.json) so the Google Maps API key can be
-// pulled from .env at prebuild/build time — a plain app.json can't
+// Dynamic config (not static app.json) so EAS_PROJECT_ID (below) and other
+// build-time values can be pulled from .env — a plain app.json can't
 // reference process.env.
 const expoConfig = {
     name: "Giant Man Express",
@@ -32,9 +32,6 @@ const expoConfig = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "ca.giantmanexpress.app",
-      config: {
-        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
-      },
       // iOS equivalent of the Android <queries> block below — without this,
       // Linking.openURL("whatsapp://...") can be silently treated as
       // unavailable on a real device even with WhatsApp installed.
@@ -52,11 +49,6 @@ const expoConfig = {
         monochromeImage: "./assets/android-icon-monochrome.png",
       },
       predictiveBackGestureEnabled: false,
-      config: {
-        googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
-        },
-      },
     },
     web: {
       favicon: "./assets/favicon.png",

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text } from "react-native";
 import * as Location from "expo-location";
 import { spacing, ThemeColors } from "../theme/theme";
 import { useTheme } from "../theme/ThemeContext";
-import { GOOGLE_MAPS_API_KEY, LatLng, geocodeAddress } from "../lib/googleMaps";
+import { LatLng, geocodeAddress } from "../lib/osm";
 import { LiveRouteMap, MapFallback } from "./LiveRouteMap";
 
 // Distance-based refresh — matches the shift location tracking cadence
@@ -22,9 +22,9 @@ interface Props {
 
 // Live route from the driver's current GPS position to a delivery address —
 // driver marker, destination marker, and the actual driving route between
-// them via the Google Directions API, auto-framed to fit both. Renders a
-// plain-text fallback (not a blank/broken map) if no Google Maps API key is
-// configured, or if the address can't be geocoded.
+// them (OpenStreetMap tiles + OSRM routing, both free/keyless — see
+// LiveRouteMap), auto-framed to fit both. Renders a plain-text fallback
+// (not a blank/broken map) if the address can't be geocoded.
 export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -74,17 +74,6 @@ export function DriverRouteMap({ destinationAddress, destinationLabel }: Props) 
   }, [destinationAddress, geocodeAttempt]);
 
   const retryGeocode = useCallback(() => setGeocodeAttempt((n) => n + 1), []);
-
-  if (!GOOGLE_MAPS_API_KEY) {
-    return (
-      <MapFallback>
-        <Text style={styles.fallbackText}>Map unavailable (no Google Maps API key configured).</Text>
-        <Text style={styles.fallbackAddress}>
-          {destinationLabel}: {destinationAddress}
-        </Text>
-      </MapFallback>
-    );
-  }
 
   if (error) {
     return (
