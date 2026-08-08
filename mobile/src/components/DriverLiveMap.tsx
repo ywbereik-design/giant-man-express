@@ -20,10 +20,12 @@ interface Props {
   driverId: string;
 }
 
-// Third-party version of DriverRouteMap: instead of watching the device's
-// own GPS, polls the backend for this OTHER driver's last-known position
-// and their current active job, then draws the same live route + ETA
-// between the two (see LiveRouteMap, shared by both).
+// Admin/dispatch's monitoring view of a driver's live position — polls the
+// backend for this driver's last-known location and their current active
+// job, then draws the live route + ETA between the two via LiveRouteMap
+// (the driver's own device has no equivalent in-app map anymore; drivers
+// use their phone's own Maps app for turn-by-turn navigation instead — see
+// openNavigationTo in lib/openInMaps.ts).
 export function DriverLiveMap({ driverId }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);

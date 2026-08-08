@@ -10,7 +10,6 @@ import { HomeScreen } from "../screens/driver/HomeScreen";
 import { DriverJobsScreen } from "../screens/driver/JobsScreen";
 import { JobDetailsScreen } from "../screens/driver/JobDetailsScreen";
 import { HistoryScreen } from "../screens/driver/HistoryScreen";
-import { LocationScreen } from "../screens/driver/LocationScreen";
 import type { Job } from "../api/types";
 import { DriverTopTabBar } from "./DriverTopTabBar";
 import { DriverTabBarHeightContext } from "./DriverTabBarHeightContext";
@@ -20,7 +19,6 @@ import { useTheme } from "../theme/ThemeContext";
 export type DriverTabParamList = {
   Home: undefined;
   Jobs: undefined;
-  Location: undefined;
   History: undefined;
 };
 
@@ -91,16 +89,6 @@ function DriverTabs() {
             tabBarLabel: "Jobs",
             tabBarIcon: ({ focused, color, size }) => (
               <Ionicons name={focused ? "briefcase" : "briefcase-outline"} size={size} color={color} />
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Location"
-          component={LocationScreen}
-          options={{
-            tabBarLabel: "Location",
-            tabBarIcon: ({ focused, color, size }) => (
-              <Ionicons name={focused ? "map" : "map-outline"} size={size} color={color} />
             ),
           }}
         />

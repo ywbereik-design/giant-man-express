@@ -55,13 +55,15 @@ export interface LiveRouteMapProps {
 }
 
 // A Leaflet map (OpenStreetMap tiles, no API key) rendered inside a WebView —
-// shared by DriverRouteMap (a driver's own live GPS route) and DriverLiveMap
-// (a third party's, polled from the backend). The page itself is built once
-// per theme change (colors are baked into its CSS) and stays mounted after
-// that; origin/destination/route updates are pushed into the already-loaded
-// page via injectJavaScript instead of reloading it, so panning/zoom state
-// and the map's tile cache survive a poll or a GPS tick. Owns its own route
-// fetch (OSRM) internally, the same way MapViewDirections used to.
+// used by DriverLiveMap for admin/dispatch's live view of a driver's
+// position (the driver's own device has no in-app map anymore; see the
+// comment on DriverLiveMap). The page itself is built once per theme change
+// (colors are baked into its CSS) and stays mounted after that; origin/
+// destination/route updates are pushed into the already-loaded page via
+// injectJavaScript instead of reloading it, so panning/zoom state and the
+// map's tile cache survive a poll. Owns its own route fetch (OSRM)
+// internally, the same way MapViewDirections used to for the old
+// Google-based version.
 export function LiveRouteMap({
   origin,
   destination,
