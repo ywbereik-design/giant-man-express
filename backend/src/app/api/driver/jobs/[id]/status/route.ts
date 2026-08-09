@@ -65,7 +65,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const allowed = DRIVER_ALLOWED_TRANSITIONS[job.status as JobStatus] ?? [];
-  if (!allowed.includes(nextStatus)) {
+  // A job with no pickup address has nowhere to "arrive" at or "pick up"
+  // from — let it skip straight from ACCEPTED to ON_THE_WAY instead of
+  // forcing the driver through two meaningless confirmation taps. Additive
+  // only (ARRIVED stays allowed too) so nothing relying on the full chain
+  // — including an older app build — breaks.
+  const effectivelyAllowed =
+    job.status === "ACCEPTED" && !job.pickupAddress ? [...allowed, "ON_THE_WAY" as JobStatus] : allowed;
+  if (!effectivelyAllowed.includes(nextStatus)) {
     return Response.json(
       { error: `Cannot move job from ${job.status} to ${nextStatus}` },
       { status: 400 }

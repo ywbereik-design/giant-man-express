@@ -17,15 +17,26 @@ export function canFail(status: JobStatus): boolean {
 
 // The full post-acceptance lifecycle, in order — drives the Job Details
 // screen's progress stepper. Doesn't include ASSIGNED (not yet accepted,
-// handled separately by SwipeToAccept) or the terminal DELIVERED/FAILED/
-// CANCELLED states.
-export const LIFECYCLE_STEPS: { status: JobStatus; label: string }[] = [
-  { status: "ACCEPTED", label: "On the way to Pickup" },
-  { status: "ARRIVED", label: "Arrived at Pickup" },
-  { status: "PICKED_UP", label: "Picked Up" },
-  { status: "ON_THE_WAY", label: "On the way to Dropoff" },
-  { status: "DELIVERED", label: "Delivered" },
-];
+// handled separately by SwipeToAccept) or the terminal FAILED/CANCELLED
+// states. A job with no pickup address has nothing to arrive at or pick up
+// from, so its ACCEPTED stage skips straight to the dropoff leg instead of
+// showing two meaningless pickup-only steps — mirrors the backend's
+// additive ACCEPTED -> ON_THE_WAY allowance in the driver status route.
+export function getLifecycleSteps(job: Job): { status: JobStatus; label: string }[] {
+  if (!job.pickupAddress) {
+    return [
+      { status: "ON_THE_WAY", label: "On the way to Dropoff" },
+      { status: "DELIVERED", label: "Delivered" },
+    ];
+  }
+  return [
+    { status: "ACCEPTED", label: "On the way to Pickup" },
+    { status: "ARRIVED", label: "Arrived at Pickup" },
+    { status: "PICKED_UP", label: "Picked Up" },
+    { status: "ON_THE_WAY", label: "On the way to Dropoff" },
+    { status: "DELIVERED", label: "Delivered" },
+  ];
+}
 
 export const STATUS_TONE: Record<JobStatus, "info" | "success" | "danger" | "muted"> = {
   ASSIGNED: "info",

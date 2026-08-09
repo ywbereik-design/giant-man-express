@@ -10,7 +10,7 @@ import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContext";
 import { STATUS_TONE, canFail } from "../../lib/jobStatus";
-import { NEXT_ACTION, useJobStatusAdvance } from "../../lib/useJobStatusAdvance";
+import { getNextAction, useJobStatusAdvance } from "../../lib/useJobStatusAdvance";
 import { JobStageBadges } from "../../components/JobStageBadges";
 import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { AddressRow } from "../../components/AddressRow";
@@ -61,12 +61,21 @@ const JobCard = memo(function JobCard({
 }: JobCardProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const action = NEXT_ACTION[item.status];
+  const action = getNextAction(item);
   // A job with an update already queued offline is excluded from batch
   // selection — its local status is stale (the queue never optimistically
   // updates `jobs`), so a batch action here could apply a second,
-  // conflicting transition on top of the one still waiting to sync.
-  const batchEligible = !!action && BATCH_ALLOWED_STATUSES.includes(action.next) && !isQueued;
+  // conflicting transition on top of the one still waiting to sync. A
+  // no-pickup job sitting at ACCEPTED is also excluded — its next action
+  // targets ON_THE_WAY via a skip path the batch endpoint doesn't know
+  // about (it still only recognizes PICKED_UP -> ON_THE_WAY), so batching
+  // it would just come back "skipped"; the single-job action (in the list
+  // or on Job Details) handles it correctly instead.
+  const batchEligible =
+    !!action &&
+    BATCH_ALLOWED_STATUSES.includes(action.next) &&
+    !isQueued &&
+    !(item.status === "ACCEPTED" && !item.pickupAddress);
 
   return (
     <Pressable onPress={selectionMode ? undefined : () => onViewDetails(item)}>
@@ -239,7 +248,7 @@ export function DriverJobsScreen() {
     let common: JobStatus | null = null;
     for (const id of selectedIds) {
       const job = jobs.find((j) => j.id === id);
-      const next = job ? NEXT_ACTION[job.status]?.next : undefined;
+      const next = job ? getNextAction(job)?.next : undefined;
       if (!next || !BATCH_ALLOWED_STATUSES.includes(next)) return null;
       if (common === null) common = next;
       else if (common !== next) return null;

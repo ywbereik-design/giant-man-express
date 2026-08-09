@@ -165,6 +165,40 @@ describe("PATCH /api/driver/jobs/[id]/status", () => {
     expect(final?.status).toBe("PICKED_UP");
   });
 
+  it("lets a job with no pickup address skip straight from ACCEPTED to ON_THE_WAY", async () => {
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id, status: "ACCEPTED" });
+    const token = await driverToken(driver.id, driver.name);
+
+    const res = await updateStatus(
+      jsonRequest(`/api/driver/jobs/${job.id}/status`, "PATCH", { status: "ON_THE_WAY" }, token),
+      { params: { id: job.id } }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.job.status).toBe("ON_THE_WAY");
+    expect(body.job.onTheWayAt).toBeTruthy();
+  });
+
+  it("still rejects ACCEPTED -> ON_THE_WAY when the job has a pickup address", async () => {
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      status: "ACCEPTED",
+      pickupAddress: "123 Main St",
+    });
+    const token = await driverToken(driver.id, driver.name);
+
+    const res = await updateStatus(
+      jsonRequest(`/api/driver/jobs/${job.id}/status`, "PATCH", { status: "ON_THE_WAY" }, token),
+      { params: { id: job.id } }
+    );
+    expect(res.status).toBe(400);
+  });
+
   it("returns 404 for a job that belongs to a different driver", async () => {
     const { driver: owner } = await createDriver();
     const { driver: intruder } = await createDriver();

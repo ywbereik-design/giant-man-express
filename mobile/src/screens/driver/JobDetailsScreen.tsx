@@ -12,8 +12,8 @@ import { SwipeToAccept } from "../../components/SwipeToAccept";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
 import { openNavigationTo } from "../../lib/openInMaps";
 import { submitJobStatus } from "../../lib/submitJobStatus";
-import { NEXT_ACTION, useJobStatusAdvance } from "../../lib/useJobStatusAdvance";
-import { STATUS_TONE, LIFECYCLE_STEPS, canFail, hasReachedAnyStage } from "../../lib/jobStatus";
+import { getNextAction, useJobStatusAdvance } from "../../lib/useJobStatusAdvance";
+import { STATUS_TONE, getLifecycleSteps, canFail, hasReachedAnyStage } from "../../lib/jobStatus";
 import { JobStageBadges } from "../../components/JobStageBadges";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
@@ -21,22 +21,24 @@ import type { DriverStackParamList } from "../../navigation/DriverNavigator";
 
 type Props = NativeStackScreenProps<DriverStackParamList, "JobDetails">;
 
-// A vertical progress list of the 5 post-acceptance stages — lets a driver
+// A vertical progress list of the post-acceptance stages — lets a driver
 // see at a glance which one they're on and what's left, instead of only
 // knowing the single next action. Hidden entirely for ASSIGNED (not yet
-// accepted — LIFECYCLE_STEPS starts at ACCEPTED) and FAILED/CANCELLED
-// (a terminal state with nothing left to step through).
+// accepted — getLifecycleSteps starts at ACCEPTED) and FAILED/CANCELLED (a
+// terminal state with nothing left to step through). Only 2 stages show for
+// a job with no pickup address — see getLifecycleSteps.
 function LifecycleStepper({ job }: { job: Job }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStepperStyles(colors), [colors]);
-  const currentIndex = LIFECYCLE_STEPS.findIndex((s) => s.status === job.status);
+  const steps = getLifecycleSteps(job);
+  const currentIndex = steps.findIndex((s) => s.status === job.status);
   if (currentIndex === -1) return null;
 
   return (
     <View>
-      {LIFECYCLE_STEPS.map((step, i) => {
-        // DELIVERED is both LIFECYCLE_STEPS' last entry and a terminal
-        // status — once reached there's nothing left "in progress", so it
+      {steps.map((step, i) => {
+        // DELIVERED is both steps' last entry and a terminal status — once
+        // reached there's nothing left "in progress", so it
         // reads as done rather than active.
         const done = i < currentIndex || (job.status === "DELIVERED" && i === currentIndex);
         const active = !done && i === currentIndex;
@@ -96,7 +98,7 @@ export function JobDetailsScreen({ route }: Props) {
     }
   }
 
-  const action = NEXT_ACTION[job.status];
+  const action = getNextAction(job);
   const isUpdating = statusAdvance.updatingId === job.id;
   const isQueued = statusAdvance.queuedIds.has(job.id);
 
@@ -110,7 +112,7 @@ export function JobDetailsScreen({ route }: Props) {
         <Text style={styles.title}>{job.title}</Text>
         {job.business && <Text style={styles.meta}>Client: {job.business.name}</Text>}
 
-        {LIFECYCLE_STEPS.some((s) => s.status === job.status) && (
+        {getLifecycleSteps(job).some((s) => s.status === job.status) && (
           <Card>
             <Text style={styles.sectionTitle}>Delivery Progress</Text>
             <LifecycleStepper job={job} />
@@ -119,13 +121,11 @@ export function JobDetailsScreen({ route }: Props) {
 
         <Card>
           <Text style={styles.sectionTitle}>Route</Text>
-          {job.pickupAddress ? (
+          {job.pickupAddress && (
             <View style={styles.routeSection}>
               <AddressRow label="Pickup: " address={job.pickupAddress} />
               <Button title="Navigate to Pickup" onPress={() => openNavigationTo(job.pickupAddress!)} />
             </View>
-          ) : (
-            <Text style={styles.meta}>No pickup address on file.</Text>
           )}
           {job.dropoffStops.map((stop, i) => (
             <View key={stop.id} style={styles.routeSection}>

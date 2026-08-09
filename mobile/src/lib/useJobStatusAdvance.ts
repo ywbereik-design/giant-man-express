@@ -8,18 +8,32 @@ import { getQueuedJobIds } from "./offlineQueue";
 import { submitJobStatus } from "./submitJobStatus";
 
 // The label shown on the button that advances a job OUT of its current
-// status, and the status that press lands it on. ACCEPTED's label names
+// status, and the status that press lands it on. A status's label names
 // the milestone the driver is heading toward next ("Arrived at Pickup"),
-// not the status it's already in — matches LIFECYCLE_STEPS in
-// jobStatus.ts, whose step N is the status this table's step N-1 advances
-// into.
-export const NEXT_ACTION: Partial<Record<JobStatus, { label: string; next: JobStatus }>> = {
-  ASSIGNED: { label: "Accept Job", next: "ACCEPTED" },
-  ACCEPTED: { label: "Arrived at Pickup", next: "ARRIVED" },
-  ARRIVED: { label: "Picked Up", next: "PICKED_UP" },
-  PICKED_UP: { label: "On the way to Dropoff", next: "ON_THE_WAY" },
-  ON_THE_WAY: { label: "Delivered", next: "DELIVERED" },
-};
+// not the status it's already in — matches getLifecycleSteps in
+// jobStatus.ts, whose step N is the status this function's step N-1
+// advances into. A job with no pickup address skips ARRIVED/PICKED_UP
+// entirely — ACCEPTED goes straight to "On the way to Dropoff" — mirroring
+// the backend's additive ACCEPTED -> ON_THE_WAY allowance in the status
+// route when job.pickupAddress is null.
+export function getNextAction(job: Job): { label: string; next: JobStatus } | undefined {
+  switch (job.status) {
+    case "ASSIGNED":
+      return { label: "Accept Job", next: "ACCEPTED" };
+    case "ACCEPTED":
+      return job.pickupAddress
+        ? { label: "Arrived at Pickup", next: "ARRIVED" }
+        : { label: "On the way to Dropoff", next: "ON_THE_WAY" };
+    case "ARRIVED":
+      return { label: "Picked Up", next: "PICKED_UP" };
+    case "PICKED_UP":
+      return { label: "On the way to Dropoff", next: "ON_THE_WAY" };
+    case "ON_THE_WAY":
+      return { label: "Delivered", next: "DELIVERED" };
+    default:
+      return undefined;
+  }
+}
 
 // Photos are required proof at these two specific transitions — mirrors the
 // clock-in selfie requirement, but with the rear camera (photo of the
@@ -90,7 +104,7 @@ export function useJobStatusAdvance(onUpdated: (job: Job) => void) {
 
   const advance = useCallback(
     async (job: Job) => {
-      const action = NEXT_ACTION[job.status];
+      const action = getNextAction(job);
       if (!action) return;
       // Set before the (possibly slow) camera capture below, not after —
       // isUpdating disables this job's action button once this is set, so a
