@@ -103,12 +103,13 @@ const expoConfig = {
 module.exports = {
   expo: {
     ...withWhatsAppQuery(expoConfig),
-    // Filled in by `eas init` (or `eas build:configure`) the first time you
-    // run it — paste the projectId it prints here. Builds will fail with
-    // "no EAS project" until this is set.
+    // Set by `eas init` (or `eas build:configure`) the first time you run
+    // it. EAS CLI can't auto-write this into a dynamic (.js) config file
+    // the way it can with a plain app.json, so it's pasted in directly here
+    // instead — process.env.EAS_PROJECT_ID still overrides it if set.
     extra: {
       eas: {
-        projectId: process.env.EAS_PROJECT_ID ?? "",
+        projectId: process.env.EAS_PROJECT_ID ?? "0982741a-ec74-4587-983c-97655330be27",
       },
     },
   },
