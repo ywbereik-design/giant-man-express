@@ -112,5 +112,19 @@ module.exports = {
         projectId: process.env.EAS_PROJECT_ID ?? "0982741a-ec74-4587-983c-97655330be27",
       },
     },
+    // Set by `eas update:configure` the first time you run it — same
+    // dynamic-config limitation as projectId above, pasted in by hand.
+    // Lets an already-installed build fetch new JS/asset bundles instead
+    // of needing a full rebuild+reinstall, as long as the change doesn't
+    // touch native code (new native modules, permissions, Expo SDK version
+    // — those still need `eas build`). "appVersion" runtime policy means
+    // an update only applies to installs whose native `version` (in this
+    // file, above) matches what the update was published for.
+    updates: {
+      url: "https://u.expo.dev/0982741a-ec74-4587-983c-97655330be27",
+    },
+    runtimeVersion: {
+      policy: "appVersion",
+    },
   },
 };
