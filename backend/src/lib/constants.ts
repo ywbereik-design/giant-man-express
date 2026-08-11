@@ -82,6 +82,21 @@ export const MAX_DROPOFF_STOPS = 50;
 export const MAX_BUSINESS_TEXT_LENGTH = 300;
 export const MAX_JOB_TYPE_NAME_LENGTH = 100;
 
+// Vehicle assigned to a driver — a small fixed list rather than free text,
+// same reasoning as FAILURE_REASONS: keeps it consistent for dispatch to
+// scan/filter on instead of accumulating typo'd variants.
+export const VEHICLE_TYPES = ["Truck", "Van"] as const;
+export type VehicleType = (typeof VEHICLE_TYPES)[number];
+
+// Driver license number/grade — short admin-entered identifiers, not
+// user-facing prose, so a tighter bound than MAX_BUSINESS_TEXT_LENGTH fits.
+export const MAX_LICENSE_TEXT_LENGTH = 50;
+
+// A plain YYYY-MM-DD date (no time component) — license expiry is a
+// calendar date, not a specific moment, so the API accepts/returns just
+// this instead of a full ISO timestamp.
+export const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 // Caller-supplied billing/report windows (invoice generation, hours-by-
 // business) had no upper bound — a multi-year periodStart/periodEnd pulls
 // every matching job into memory in one unbounded query. 366 days (not 365,
@@ -89,3 +104,7 @@ export const MAX_JOB_TYPE_NAME_LENGTH = 100;
 // covers every real billing cycle this app actually needs; anything longer
 // should be run as several smaller requests instead.
 export const MAX_BILLING_PERIOD_DAYS = 366;
+
+// A dispatcher-facing lookup code, not free-form prose — short like
+// employeeCode, same reasoning as MAX_LICENSE_TEXT_LENGTH.
+export const MAX_BUSINESS_CODE_LENGTH = 30;

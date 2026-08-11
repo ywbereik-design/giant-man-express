@@ -2,12 +2,13 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
-import { Driver } from "../../api/types";
+import { Driver, VEHICLE_TYPES, VehicleType } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
+import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
-import { isValidPhone } from "../../lib/validation";
-import { formatTime } from "../../lib/dateRange";
+import { isValidPhone, isValidDateOnly } from "../../lib/validation";
+import { formatDate, formatTime } from "../../lib/dateRange";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
 
@@ -18,6 +19,12 @@ const JOB_STATUS_LABEL: Record<string, string> = {
   PICKED_UP: "Picked Up",
   ON_THE_WAY: "On the Way",
 };
+
+const VEHICLE_OPTIONS = VEHICLE_TYPES.map((v) => ({ id: v, label: v }));
+
+function isLicenseExpired(expiry: string): boolean {
+  return new Date(expiry).getTime() < Date.now();
+}
 
 // Memoized so typing in the "Add Driver" form above the list (a separate
 // piece of state in the parent) doesn't re-render every existing driver
@@ -35,11 +42,19 @@ const DriverRow = memo(function DriverRow({
   editName,
   editPhone,
   editPin,
+  editVehicle,
+  editLicenseNumber,
+  editLicenseExpiry,
+  editLicenseGrade,
   editError,
   editSaving,
   onEditNameChange,
   onEditPhoneChange,
   onEditPinChange,
+  onEditVehicleChange,
+  onEditLicenseNumberChange,
+  onEditLicenseExpiryChange,
+  onEditLicenseGradeChange,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
@@ -54,11 +69,19 @@ const DriverRow = memo(function DriverRow({
   editName: string;
   editPhone: string;
   editPin: string;
+  editVehicle: string;
+  editLicenseNumber: string;
+  editLicenseExpiry: string;
+  editLicenseGrade: string;
   editError: string | null;
   editSaving: boolean;
   onEditNameChange: (v: string) => void;
   onEditPhoneChange: (v: string) => void;
   onEditPinChange: (v: string) => void;
+  onEditVehicleChange: (v: string) => void;
+  onEditLicenseNumberChange: (v: string) => void;
+  onEditLicenseExpiryChange: (v: string) => void;
+  onEditLicenseGradeChange: (v: string) => void;
   onStartEdit: (driver: Driver) => void;
   onCancelEdit: () => void;
   onSaveEdit: (driver: Driver) => void;
@@ -85,6 +108,25 @@ const DriverRow = memo(function DriverRow({
           placeholder="New 4-8 digit PIN"
           accessibilityLabel="Reset PIN"
         />
+        <Label>Assigned Vehicle (optional)</Label>
+        <ChipSelect options={VEHICLE_OPTIONS} selectedId={editVehicle || null} onSelect={onEditVehicleChange} />
+        <Label>License Number (optional)</Label>
+        <FieldInput value={editLicenseNumber} onChangeText={onEditLicenseNumberChange} accessibilityLabel="License Number" />
+        <Label>License Expiry (optional, YYYY-MM-DD)</Label>
+        <FieldInput
+          value={editLicenseExpiry}
+          onChangeText={onEditLicenseExpiryChange}
+          placeholder="2027-06-30"
+          maxLength={10}
+          accessibilityLabel="License Expiry"
+        />
+        <Label>License Grade (optional)</Label>
+        <FieldInput
+          value={editLicenseGrade}
+          onChangeText={onEditLicenseGradeChange}
+          placeholder="e.g. G, AZ, DZ"
+          accessibilityLabel="License Grade"
+        />
         <ErrorText>{editError}</ErrorText>
         <Button title="Save Changes" onPress={() => onSaveEdit(item)} loading={editSaving} />
         <Button title="Cancel" variant="secondary" onPress={onCancelEdit} />
@@ -109,6 +151,21 @@ const DriverRow = memo(function DriverRow({
           )}
         </View>
       </View>
+      {(item.vehicle || item.licenseNumber || item.licenseExpiry || item.licenseGrade) && (
+        <View style={styles.jobRow}>
+          <Text style={styles.meta}>
+            {[
+              item.vehicle,
+              item.licenseGrade && `License ${item.licenseGrade}`,
+              item.licenseNumber,
+              item.licenseExpiry && `Expires ${formatDate(item.licenseExpiry)}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+          {item.licenseExpiry && isLicenseExpired(item.licenseExpiry) && <Badge text="License Expired" tone="danger" />}
+        </View>
+      )}
       {item.active && item.currentJobStatus && (
         <View style={styles.jobRow}>
           <Badge
@@ -175,6 +232,10 @@ export function DriversScreen() {
   const [employeeCode, setEmployeeCode] = useState("");
   const [pin, setPin] = useState("");
   const [phone, setPhone] = useState("");
+  const [vehicle, setVehicle] = useState("");
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [licenseExpiry, setLicenseExpiry] = useState("");
+  const [licenseGrade, setLicenseGrade] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -184,6 +245,10 @@ export function DriversScreen() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editPin, setEditPin] = useState("");
+  const [editVehicle, setEditVehicle] = useState("");
+  const [editLicenseNumber, setEditLicenseNumber] = useState("");
+  const [editLicenseExpiry, setEditLicenseExpiry] = useState("");
+  const [editLicenseGrade, setEditLicenseGrade] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -237,6 +302,10 @@ export function DriversScreen() {
       setError("Enter a valid phone number");
       return;
     }
+    if (licenseExpiry.trim() && !isValidDateOnly(licenseExpiry.trim())) {
+      setError("License expiry must be in YYYY-MM-DD format");
+      return;
+    }
     setSaving(true);
     try {
       const res = await api.post<{ driver: Driver }>("/api/drivers", {
@@ -244,11 +313,19 @@ export function DriversScreen() {
         employeeCode: employeeCode.trim(),
         pin: pin.trim(),
         phone: phone.trim() || undefined,
+        vehicle: (vehicle as VehicleType) || undefined,
+        licenseNumber: licenseNumber.trim() || undefined,
+        licenseExpiry: licenseExpiry.trim() || undefined,
+        licenseGrade: licenseGrade.trim() || undefined,
       });
       setName("");
       setEmployeeCode("");
       setPin("");
       setPhone("");
+      setVehicle("");
+      setLicenseNumber("");
+      setLicenseExpiry("");
+      setLicenseGrade("");
       // Insert locally (re-sorted by name, matching the server's own order)
       // instead of calling load() — a full reload re-fetches only the first
       // page, silently dropping any extra pages already pulled in via "Load
@@ -328,6 +405,10 @@ export function DriversScreen() {
     setEditName(driver.name);
     setEditPhone(driver.phone ?? "");
     setEditPin("");
+    setEditVehicle(driver.vehicle ?? "");
+    setEditLicenseNumber(driver.licenseNumber ?? "");
+    setEditLicenseExpiry(driver.licenseExpiry ?? "");
+    setEditLicenseGrade(driver.licenseGrade ?? "");
     setEditError(null);
   }, []);
 
@@ -348,12 +429,20 @@ export function DriversScreen() {
         setEditError("Enter a valid phone number");
         return;
       }
+      if (editLicenseExpiry.trim() && !isValidDateOnly(editLicenseExpiry.trim())) {
+        setEditError("License expiry must be in YYYY-MM-DD format");
+        return;
+      }
       setEditSaving(true);
       try {
         const res = await api.patch<{ driver: Driver }>(`/api/drivers/${driver.id}`, {
           name: editName.trim(),
           phone: editPhone.trim() || undefined,
           ...(editPin.trim() ? { pin: editPin.trim() } : {}),
+          vehicle: (editVehicle as VehicleType) || undefined,
+          licenseNumber: editLicenseNumber.trim() || undefined,
+          licenseExpiry: editLicenseExpiry.trim() || undefined,
+          licenseGrade: editLicenseGrade.trim() || undefined,
         });
         setEditingId(null);
         // Merge instead of load() — same reasoning as toggleActive above:
@@ -370,7 +459,7 @@ export function DriversScreen() {
         setEditSaving(false);
       }
     },
-    [editName, editPhone, editPin]
+    [editName, editPhone, editPin, editVehicle, editLicenseNumber, editLicenseExpiry, editLicenseGrade]
   );
 
   const renderItem = useCallback(
@@ -386,11 +475,19 @@ export function DriversScreen() {
           editName={isEditing ? editName : ""}
           editPhone={isEditing ? editPhone : ""}
           editPin={isEditing ? editPin : ""}
+          editVehicle={isEditing ? editVehicle : ""}
+          editLicenseNumber={isEditing ? editLicenseNumber : ""}
+          editLicenseExpiry={isEditing ? editLicenseExpiry : ""}
+          editLicenseGrade={isEditing ? editLicenseGrade : ""}
           editError={isEditing ? editError : null}
           editSaving={isEditing ? editSaving : false}
           onEditNameChange={setEditName}
           onEditPhoneChange={setEditPhone}
           onEditPinChange={setEditPin}
+          onEditVehicleChange={setEditVehicle}
+          onEditLicenseNumberChange={setEditLicenseNumber}
+          onEditLicenseExpiryChange={setEditLicenseExpiry}
+          onEditLicenseGradeChange={setEditLicenseGrade}
           onStartEdit={startEdit}
           onCancelEdit={cancelEdit}
           onSaveEdit={saveEdit}
@@ -407,6 +504,10 @@ export function DriversScreen() {
       editName,
       editPhone,
       editPin,
+      editVehicle,
+      editLicenseNumber,
+      editLicenseExpiry,
+      editLicenseGrade,
       editError,
       editSaving,
       startEdit,
@@ -452,6 +553,25 @@ export function DriversScreen() {
               />
               <Label>Phone (optional)</Label>
               <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />
+              <Label>Assigned Vehicle (optional)</Label>
+              <ChipSelect options={VEHICLE_OPTIONS} selectedId={vehicle || null} onSelect={setVehicle} />
+              <Label>License Number (optional)</Label>
+              <FieldInput value={licenseNumber} onChangeText={setLicenseNumber} accessibilityLabel="License Number" />
+              <Label>License Expiry (optional, YYYY-MM-DD)</Label>
+              <FieldInput
+                value={licenseExpiry}
+                onChangeText={setLicenseExpiry}
+                placeholder="2027-06-30"
+                maxLength={10}
+                accessibilityLabel="License Expiry"
+              />
+              <Label>License Grade (optional)</Label>
+              <FieldInput
+                value={licenseGrade}
+                onChangeText={setLicenseGrade}
+                placeholder="e.g. G, AZ, DZ"
+                accessibilityLabel="License Grade"
+              />
               <ErrorText>{error}</ErrorText>
               <Button title="Add Driver" onPress={addDriver} loading={saving} />
             </Card>

@@ -32,7 +32,6 @@ const JOB_LIST_SELECT = {
   businessId: true,
   business: true,
   pickupAddress: true,
-  clientPhone: true,
   notes: true,
   status: true,
   createdAt: true,
@@ -49,6 +48,11 @@ const JOB_LIST_SELECT = {
   deliveryLng: true,
   failureReason: true,
 } as const;
+
+// ADMIN-only addition to the list select above — see the schema comment on
+// Job.clientPhone for why Dispatch doesn't get this field at all, not even
+// read-only.
+const JOB_LIST_SELECT_ADMIN = { ...JOB_LIST_SELECT, clientPhone: true } as const;
 
 export async function GET(req: NextRequest) {
   // Dispatch and admin both need full visibility into jobs — dispatching
@@ -67,7 +71,7 @@ export async function GET(req: NextRequest) {
       ...(driverId ? { driverId } : {}),
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: JOB_LIST_SELECT,
+    select: auth.session.role === "ADMIN" ? JOB_LIST_SELECT_ADMIN : JOB_LIST_SELECT,
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
@@ -81,6 +85,9 @@ const createSchema = z.object({
   driverId: z.string().min(1),
   businessId: z.string().min(1).optional(),
   pickupAddress: z.string().trim().max(MAX_JOB_TEXT_LENGTH).optional(),
+  // Accepted from any requester at the schema level — restricted to
+  // ADMIN-only actually being applied in the handler below, so a Dispatch
+  // request that includes this is parsed fine but silently has no effect.
   clientPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   // One pickup, any number of delivery stops, in route order — capped so a
   // single job can't force an unbounded JobStop bulk-insert.
@@ -94,7 +101,7 @@ export async function POST(req: NextRequest) {
 
   const body = await parseBody(req, createSchema);
   if (isError(body)) return body.error;
-  const { jobTypeId, driverId, businessId, dropoffAddresses, ...jobData } = body.data;
+  const { jobTypeId, driverId, businessId, dropoffAddresses, clientPhone, ...jobData } = body.data;
 
   const [jobType, driver, business] = await Promise.all([
     prisma.jobType.findUnique({ where: { id: jobTypeId } }),
@@ -120,6 +127,9 @@ export async function POST(req: NextRequest) {
         driverId,
         businessId,
         status: JOB_STATUSES[0],
+        // Dispatch-submitted clientPhone (if any) is silently dropped, not
+        // rejected — see the schema comment on Job.clientPhone.
+        ...(auth.session.role === "ADMIN" && clientPhone ? { clientPhone } : {}),
         ...(dropoffAddresses?.length
           ? { dropoffStops: { create: dropoffAddresses.map((address, sequence) => ({ address, sequence })) } }
           : {}),

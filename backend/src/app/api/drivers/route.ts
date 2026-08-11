@@ -5,7 +5,13 @@ import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 import { roundKm, startOfTodayUTC } from "@/lib/geo";
-import { PHONE_PATTERN, SHIFT_PHOTO_EXPIRY_MS } from "@/lib/constants";
+import {
+  PHONE_PATTERN,
+  SHIFT_PHOTO_EXPIRY_MS,
+  VEHICLE_TYPES,
+  MAX_LICENSE_TEXT_LENGTH,
+  DATE_ONLY_PATTERN,
+} from "@/lib/constants";
 import { parsePaginationParams, buildPage } from "@/lib/pagination";
 
 export async function GET(req: NextRequest) {
@@ -47,6 +53,10 @@ export async function GET(req: NextRequest) {
       currentLat: true,
       currentLng: true,
       currentLocationAt: true,
+      vehicle: true,
+      licenseNumber: true,
+      licenseExpiry: true,
+      licenseGrade: true,
     },
   });
   const { items: drivers, nextCursor } = buildPage(rows, limit);
@@ -127,6 +137,10 @@ const createSchema = z.object({
     .max(8)
     .regex(/^\d+$/, "PIN must contain digits only"),
   phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
+  vehicle: z.enum(VEHICLE_TYPES).optional(),
+  licenseNumber: z.string().trim().max(MAX_LICENSE_TEXT_LENGTH).optional(),
+  licenseExpiry: z.string().regex(DATE_ONLY_PATTERN, "Use YYYY-MM-DD format").optional(),
+  licenseGrade: z.string().trim().max(MAX_LICENSE_TEXT_LENGTH).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -135,7 +149,7 @@ export async function POST(req: NextRequest) {
 
   const body = await parseBody(req, createSchema);
   if (isError(body)) return body.error;
-  const { name, employeeCode, pin, phone } = body.data;
+  const { name, employeeCode, pin, phone, vehicle, licenseNumber, licenseExpiry, licenseGrade } = body.data;
 
   const existing = await prisma.driver.findUnique({ where: { employeeCode } });
   if (existing) {
@@ -145,7 +159,16 @@ export async function POST(req: NextRequest) {
   const pinHash = await hashSecret(pin);
   const result = await runOrRespond(() =>
     prisma.driver.create({
-      data: { name, employeeCode, phone, pinHash },
+      data: {
+        name,
+        employeeCode,
+        phone,
+        pinHash,
+        vehicle,
+        licenseNumber,
+        licenseExpiry: licenseExpiry ? new Date(licenseExpiry) : undefined,
+        licenseGrade,
+      },
     })
   );
   if (isResponse(result)) return result;
@@ -158,6 +181,10 @@ export async function POST(req: NextRequest) {
         employeeCode: result.employeeCode,
         phone: result.phone,
         active: result.active,
+        vehicle: result.vehicle,
+        licenseNumber: result.licenseNumber,
+        licenseExpiry: result.licenseExpiry,
+        licenseGrade: result.licenseGrade,
       },
     },
     { status: 201 }

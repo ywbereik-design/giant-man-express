@@ -3,7 +3,7 @@ import { FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business } from "../../api/types";
-import { Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
+import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { isValidEmail, isValidPhone } from "../../lib/validation";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
@@ -25,6 +25,7 @@ const BusinessRow = memo(function BusinessRow({
   item,
   isEditing,
   editName,
+  editCode,
   editContactName,
   editContactEmail,
   editPhone,
@@ -33,6 +34,7 @@ const BusinessRow = memo(function BusinessRow({
   editError,
   editSaving,
   onEditNameChange,
+  onEditCodeChange,
   onEditContactNameChange,
   onEditContactEmailChange,
   onEditPhoneChange,
@@ -45,6 +47,7 @@ const BusinessRow = memo(function BusinessRow({
   item: Business;
   isEditing: boolean;
   editName: string;
+  editCode: string;
   editContactName: string;
   editContactEmail: string;
   editPhone: string;
@@ -53,6 +56,7 @@ const BusinessRow = memo(function BusinessRow({
   editError: string | null;
   editSaving: boolean;
   onEditNameChange: (v: string) => void;
+  onEditCodeChange: (v: string) => void;
   onEditContactNameChange: (v: string) => void;
   onEditContactEmailChange: (v: string) => void;
   onEditPhoneChange: (v: string) => void;
@@ -70,6 +74,14 @@ const BusinessRow = memo(function BusinessRow({
       <Card>
         <Label>Business Name</Label>
         <FieldInput value={editName} onChangeText={onEditNameChange} accessibilityLabel="Business Name" />
+        <Label>Code (optional)</Label>
+        <FieldInput
+          value={editCode}
+          onChangeText={onEditCodeChange}
+          autoCapitalize="characters"
+          maxLength={30}
+          accessibilityLabel="Code"
+        />
         <Label>Contact Name (optional)</Label>
         <FieldInput value={editContactName} onChangeText={onEditContactNameChange} accessibilityLabel="Contact Name" />
         <Label>Contact Email (optional)</Label>
@@ -100,7 +112,10 @@ const BusinessRow = memo(function BusinessRow({
 
   return (
     <Card>
-      <Text style={styles.name}>{item.name}</Text>
+      <View style={styles.nameRow}>
+        <Text style={styles.name}>{item.name}</Text>
+        {item.code && <Badge text={item.code} />}
+      </View>
       {item.contactEmail && <Text style={styles.meta}>{item.contactEmail}</Text>}
       {item.phone && <Text style={styles.meta}>{item.phone}</Text>}
       {item.address && <Text style={styles.meta}>{item.address}</Text>}
@@ -118,6 +133,7 @@ export function BusinessesScreen() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -128,6 +144,7 @@ export function BusinessesScreen() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editCode, setEditCode] = useState("");
   const [editContactName, setEditContactName] = useState("");
   const [editContactEmail, setEditContactEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -176,6 +193,7 @@ export function BusinessesScreen() {
     try {
       await api.post("/api/businesses", {
         name: name.trim(),
+        code: code.trim() || undefined,
         contactName: contactName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -183,6 +201,7 @@ export function BusinessesScreen() {
         billingRate: rate,
       });
       setName("");
+      setCode("");
       setContactName("");
       setContactEmail("");
       setPhone("");
@@ -199,6 +218,7 @@ export function BusinessesScreen() {
   const startEdit = useCallback((business: Business) => {
     setEditingId(business.id);
     setEditName(business.name);
+    setEditCode(business.code ?? "");
     setEditContactName(business.contactName ?? "");
     setEditContactEmail(business.contactEmail ?? "");
     setEditPhone(business.phone ?? "");
@@ -233,6 +253,7 @@ export function BusinessesScreen() {
       try {
         await api.patch(`/api/businesses/${business.id}`, {
           name: editName.trim(),
+          code: editCode.trim() || undefined,
           contactName: editContactName.trim() || undefined,
           contactEmail: editContactEmail.trim() || undefined,
           phone: editPhone.trim() || undefined,
@@ -247,7 +268,7 @@ export function BusinessesScreen() {
         setEditSaving(false);
       }
     },
-    [editName, editContactName, editContactEmail, editPhone, editAddress, editBillingRate, load]
+    [editName, editCode, editContactName, editContactEmail, editPhone, editAddress, editBillingRate, load]
   );
 
   const renderItem = useCallback(
@@ -258,6 +279,7 @@ export function BusinessesScreen() {
           item={item}
           isEditing={isEditing}
           editName={isEditing ? editName : ""}
+          editCode={isEditing ? editCode : ""}
           editContactName={isEditing ? editContactName : ""}
           editContactEmail={isEditing ? editContactEmail : ""}
           editPhone={isEditing ? editPhone : ""}
@@ -266,6 +288,7 @@ export function BusinessesScreen() {
           editError={isEditing ? editError : null}
           editSaving={isEditing ? editSaving : false}
           onEditNameChange={setEditName}
+          onEditCodeChange={setEditCode}
           onEditContactNameChange={setEditContactName}
           onEditContactEmailChange={setEditContactEmail}
           onEditPhoneChange={setEditPhone}
@@ -280,6 +303,7 @@ export function BusinessesScreen() {
     [
       editingId,
       editName,
+      editCode,
       editContactName,
       editContactEmail,
       editPhone,
@@ -308,6 +332,8 @@ export function BusinessesScreen() {
             <Card>
               <Label>Business Name</Label>
               <FieldInput value={name} onChangeText={setName} placeholder="Capital BBQ" />
+              <Label>Code (optional)</Label>
+              <FieldInput value={code} onChangeText={setCode} autoCapitalize="characters" maxLength={30} placeholder="CAPBBQ1" />
               <Label>Contact Name (optional)</Label>
               <FieldInput value={contactName} onChangeText={setContactName} placeholder="Jane Doe" />
               <Label>Contact Email (optional)</Label>
@@ -334,6 +360,7 @@ export function BusinessesScreen() {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     name: { color: colors.text, fontSize: 16, fontWeight: "700" },
+    nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
     meta: { color: colors.textMuted, marginTop: 2, fontSize: 13 },
     empty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.lg },
   });

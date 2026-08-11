@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireRole, hashSecret } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
-import { PHONE_PATTERN } from "@/lib/constants";
+import { PHONE_PATTERN, VEHICLE_TYPES, MAX_LICENSE_TEXT_LENGTH, DATE_ONLY_PATTERN } from "@/lib/constants";
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
@@ -17,6 +17,12 @@ const updateSchema = z.object({
     .max(8)
     .regex(/^\d+$/, "PIN must contain digits only")
     .optional(),
+  // Each of these three accepts "" to explicitly clear the field — same
+  // "leave as-is if omitted, blank to remove" convention as phone above.
+  vehicle: z.union([z.enum(VEHICLE_TYPES), z.literal("")]).optional(),
+  licenseNumber: z.union([z.string().trim().max(MAX_LICENSE_TEXT_LENGTH), z.literal("")]).optional(),
+  licenseExpiry: z.union([z.string().regex(DATE_ONLY_PATTERN, "Use YYYY-MM-DD format"), z.literal("")]).optional(),
+  licenseGrade: z.union([z.string().trim().max(MAX_LICENSE_TEXT_LENGTH), z.literal("")]).optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -25,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await parseBody(req, updateSchema);
   if (isError(body)) return body.error;
-  const { pin, ...rest } = body.data;
+  const { pin, vehicle, licenseNumber, licenseGrade, licenseExpiry, ...rest } = body.data;
   const pinHash = pin ? await hashSecret(pin) : undefined;
 
   const result = await runOrRespond(() =>
@@ -35,8 +41,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       // on an admin-driven PIN reset means an old (possibly compromised)
       // token stops authenticating immediately instead of staying valid for
       // up to 30 more days.
-      data: { ...rest, ...(pinHash ? { pinHash, tokenVersion: { increment: 1 } } : {}) },
-      select: { id: true, name: true, employeeCode: true, phone: true, active: true },
+      data: {
+        ...rest,
+        ...(pinHash ? { pinHash, tokenVersion: { increment: 1 } } : {}),
+        ...(vehicle !== undefined ? { vehicle: vehicle || null } : {}),
+        ...(licenseNumber !== undefined ? { licenseNumber: licenseNumber || null } : {}),
+        ...(licenseGrade !== undefined ? { licenseGrade: licenseGrade || null } : {}),
+        ...(licenseExpiry !== undefined ? { licenseExpiry: licenseExpiry ? new Date(licenseExpiry) : null } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        employeeCode: true,
+        phone: true,
+        active: true,
+        vehicle: true,
+        licenseNumber: true,
+        licenseExpiry: true,
+        licenseGrade: true,
+      },
     })
   );
   if (isResponse(result)) return result;

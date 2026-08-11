@@ -12,8 +12,8 @@ import { useDriverTabBarHeight } from "../../navigation/DriverTabBarHeightContex
 import { STATUS_TONE, canFail } from "../../lib/jobStatus";
 import { getNextAction, useJobStatusAdvance } from "../../lib/useJobStatusAdvance";
 import { JobStageBadges } from "../../components/JobStageBadges";
-import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { AddressRow } from "../../components/AddressRow";
+import { ClientContactButtons } from "../../components/ClientContactButtons";
 import { FailedDeliveryModal } from "../../components/FailedDeliveryModal";
 import { flushQueuedJobUpdates } from "../../lib/offlineQueue";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";

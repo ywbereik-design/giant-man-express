@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/lib/db";
-import { GET as listDrivers } from "@/app/api/drivers/route";
+import { GET as listDrivers, POST as createDriverRoute } from "@/app/api/drivers/route";
 import { PATCH as updateDriver, DELETE as deleteDriver } from "@/app/api/drivers/[id]/route";
 import { GET as driverStatus } from "@/app/api/driver/status/route";
 import { createStaff, createDriver, createJobType, createJob, tokenFor, jsonRequest, getRequest } from "./helpers";
@@ -131,5 +131,122 @@ describe("DELETE /api/drivers/[id]", () => {
       params: { id: "does-not-exist" },
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/drivers — fleet/compliance fields", () => {
+  it("creates a driver with vehicle, license number, expiry, and grade", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createDriverRoute(
+      jsonRequest(
+        "/api/drivers",
+        "POST",
+        {
+          name: "Fleet Test Driver",
+          employeeCode: `FLEET-${Date.now()}`,
+          pin: "4321",
+          vehicle: "Van",
+          licenseNumber: "L1234567",
+          licenseExpiry: "2027-06-30",
+          licenseGrade: "G",
+        },
+        token
+      )
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.driver.vehicle).toBe("Van");
+    expect(body.driver.licenseNumber).toBe("L1234567");
+    expect(body.driver.licenseExpiry).toBe("2027-06-30T00:00:00.000Z");
+    expect(body.driver.licenseGrade).toBe("G");
+  });
+
+  it("creates a driver fine with none of the fleet fields set", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createDriverRoute(
+      jsonRequest(
+        "/api/drivers",
+        "POST",
+        { name: "No Fleet Info", employeeCode: `NOFLEET-${Date.now()}`, pin: "4321" },
+        token
+      )
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.driver.vehicle).toBeNull();
+    expect(body.driver.licenseExpiry).toBeNull();
+  });
+
+  it("rejects a vehicle value outside the fixed Truck/Van list", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createDriverRoute(
+      jsonRequest(
+        "/api/drivers",
+        "POST",
+        { name: "Bad Vehicle", employeeCode: `BADVEH-${Date.now()}`, pin: "4321", vehicle: "Motorcycle" },
+        token
+      )
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a license expiry that isn't YYYY-MM-DD", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createDriverRoute(
+      jsonRequest(
+        "/api/drivers",
+        "POST",
+        { name: "Bad Date", employeeCode: `BADDATE-${Date.now()}`, pin: "4321", licenseExpiry: "06/30/2027" },
+        token
+      )
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("PATCH /api/drivers/[id] — fleet/compliance fields", () => {
+  it("updates and then clears the fleet fields", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const setRes = await updateDriver(
+      jsonRequest(
+        `/api/drivers/${driver.id}`,
+        "PATCH",
+        { vehicle: "Truck", licenseNumber: "T-999", licenseExpiry: "2026-12-31", licenseGrade: "AZ" },
+        token
+      ),
+      { params: { id: driver.id } }
+    );
+    expect(setRes.status).toBe(200);
+    const setBody = await setRes.json();
+    expect(setBody.driver.vehicle).toBe("Truck");
+    expect(setBody.driver.licenseGrade).toBe("AZ");
+
+    // Empty string explicitly clears each field back to null.
+    const clearRes = await updateDriver(
+      jsonRequest(
+        `/api/drivers/${driver.id}`,
+        "PATCH",
+        { vehicle: "", licenseNumber: "", licenseExpiry: "", licenseGrade: "" },
+        token
+      ),
+      { params: { id: driver.id } }
+    );
+    expect(clearRes.status).toBe(200);
+    const clearBody = await clearRes.json();
+    expect(clearBody.driver.vehicle).toBeNull();
+    expect(clearBody.driver.licenseNumber).toBeNull();
+    expect(clearBody.driver.licenseExpiry).toBeNull();
+    expect(clearBody.driver.licenseGrade).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { prisma } from "@/lib/db";
 import { GET as listJobs, POST as createJobRoute } from "@/app/api/jobs/route";
-import { GET as getJobRoute } from "@/app/api/jobs/[id]/route";
+import { GET as getJobRoute, PATCH as updateJobRoute } from "@/app/api/jobs/[id]/route";
 import { createStaff, createDriver, createJob, createJobType, tokenFor, jsonRequest, getRequest, FAKE_PHOTO } from "./helpers";
 
 describe("POST /api/jobs", () => {
@@ -51,21 +51,6 @@ describe("POST /api/jobs", () => {
     expect(res.status).toBe(403);
   });
 
-  it("rejects an invalid clientPhone", async () => {
-    const { staff } = await createStaff();
-    const { driver } = await createDriver();
-    const jobType = await createJobType();
-    const token = await tokenFor(staff.id, "ADMIN", staff.name);
-    const res = await createJobRoute(
-      jsonRequest(
-        "/api/jobs",
-        "POST",
-        { title: "Test delivery", jobTypeId: jobType.id, driverId: driver.id, clientPhone: "call me maybe" },
-        token
-      )
-    );
-    expect(res.status).toBe(400);
-  });
 });
 
 describe("GET /api/jobs", () => {
@@ -152,5 +137,123 @@ describe("GET /api/jobs/[id]", () => {
     const token = await tokenFor(driver.id, "DRIVER", driver.name);
     const res = await getJobRoute(getRequest(`/api/jobs/${job.id}`, token), { params: { id: job.id } });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("clientPhone — ADMIN-only, not visible or settable by Dispatch", () => {
+  it("saves clientPhone when an admin sets it on create", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createJobRoute(
+      jsonRequest(
+        "/api/jobs",
+        "POST",
+        { title: "Admin job", jobTypeId: jobType.id, driverId: driver.id, clientPhone: "613-555-0100" },
+        token
+      )
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.job.clientPhone).toBe("613-555-0100");
+  });
+
+  it("silently ignores clientPhone when dispatch sets it on create", async () => {
+    const { staff } = await createStaff({ role: "DISPATCH" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const token = await tokenFor(staff.id, "DISPATCH", staff.name);
+
+    const res = await createJobRoute(
+      jsonRequest(
+        "/api/jobs",
+        "POST",
+        { title: "Dispatch job", jobTypeId: jobType.id, driverId: driver.id, clientPhone: "613-555-0100" },
+        token
+      )
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.job.clientPhone).toBeNull();
+  });
+
+  it("omits clientPhone from the list response for dispatch but includes it for admin", async () => {
+    const { staff: admin } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const adminToken = await tokenFor(admin.id, "ADMIN", admin.name);
+    await createJobRoute(
+      jsonRequest(
+        "/api/jobs",
+        "POST",
+        { title: "Phone job", jobTypeId: jobType.id, driverId: driver.id, clientPhone: "613-555-0199" },
+        adminToken
+      )
+    );
+
+    const adminList = await (await listJobs(getRequest("/api/jobs?limit=200", adminToken))).json();
+    const adminJob = adminList.jobs.find((j: { title: string }) => j.title === "Phone job");
+    expect(adminJob.clientPhone).toBe("613-555-0199");
+
+    const { staff: dispatch } = await createStaff({ role: "DISPATCH" });
+    const dispatchToken = await tokenFor(dispatch.id, "DISPATCH", dispatch.name);
+    const dispatchList = await (await listJobs(getRequest("/api/jobs?limit=200", dispatchToken))).json();
+    const dispatchJob = dispatchList.jobs.find((j: { title: string }) => j.title === "Phone job");
+    expect(dispatchJob).toBeDefined();
+    expect("clientPhone" in dispatchJob).toBe(false);
+  });
+
+  it("omits clientPhone from the single-job detail response for dispatch but includes it for admin", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id });
+    await prisma.job.update({ where: { id: job.id }, data: { clientPhone: "613-555-0177" } });
+
+    const adminToken = await tokenFor(staff.id, "ADMIN", staff.name);
+    const adminBody = await (await getJobRoute(getRequest(`/api/jobs/${job.id}`, adminToken), { params: { id: job.id } })).json();
+    expect(adminBody.job.clientPhone).toBe("613-555-0177");
+
+    const { staff: dispatchStaff } = await createStaff({ role: "DISPATCH" });
+    const dispatchToken = await tokenFor(dispatchStaff.id, "DISPATCH", dispatchStaff.name);
+    const dispatchBody = await (
+      await getJobRoute(getRequest(`/api/jobs/${job.id}`, dispatchToken), { params: { id: job.id } })
+    ).json();
+    expect("clientPhone" in dispatchBody.job).toBe(false);
+  });
+
+  it("silently ignores a dispatch PATCH attempt to set clientPhone", async () => {
+    const { staff } = await createStaff({ role: "DISPATCH" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id });
+    const token = await tokenFor(staff.id, "DISPATCH", staff.name);
+
+    const res = await updateJobRoute(
+      jsonRequest(`/api/jobs/${job.id}`, "PATCH", { clientPhone: "613-555-0188" }, token),
+      { params: { id: job.id } }
+    );
+    expect(res.status).toBe(200);
+
+    const updated = await prisma.job.findUnique({ where: { id: job.id } });
+    expect(updated?.clientPhone).toBeNull();
+  });
+
+  it("lets an admin set clientPhone via PATCH", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await updateJobRoute(
+      jsonRequest(`/api/jobs/${job.id}`, "PATCH", { clientPhone: "613-555-0188" }, token),
+      { params: { id: job.id } }
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.job.clientPhone).toBe("613-555-0188");
   });
 });

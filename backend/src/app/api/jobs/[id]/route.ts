@@ -32,6 +32,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const job = await prisma.job.findUnique({ where: { id: params.id }, include: JOB_DETAIL_INCLUDE });
   if (!job) return Response.json({ error: "Not found" }, { status: 404 });
 
+  // See the schema comment on Job.clientPhone — Dispatch doesn't get this
+  // field at all, not even read-only.
+  if (auth.session.role !== "ADMIN") {
+    const { clientPhone: _clientPhone, ...rest } = job;
+    return Response.json({ job: rest });
+  }
+
   return Response.json({ job });
 }
 
@@ -41,6 +48,8 @@ const updateSchema = z.object({
   driverId: z.string().min(1).optional(),
   businessId: z.string().min(1).nullable().optional(),
   pickupAddress: z.string().trim().max(MAX_JOB_TEXT_LENGTH).optional(),
+  // Accepted from any requester at the schema level — restricted to
+  // ADMIN-only actually being applied in the handler below.
   clientPhone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   // When provided, replaces the job's whole set of delivery stops — capped
   // so a single edit can't force an unbounded JobStop bulk-insert.
@@ -81,7 +90,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const body = await parseBody(req, updateSchema);
   if (isError(body)) return body.error;
-  const { status, dropoffAddresses, failureReason, ...rest } = body.data;
+  const { status, dropoffAddresses, failureReason, clientPhone, ...rest } = body.data;
 
   if (status === "FAILED" && !failureReason) {
     return Response.json({ error: "A reason is required to mark a job failed" }, { status: 400 });
@@ -128,6 +137,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       where: { id: params.id },
       data: {
         ...rest,
+        // Dispatch-submitted clientPhone (if any) is silently dropped, not
+        // rejected — see the schema comment on Job.clientPhone.
+        ...(auth.session.role === "ADMIN" && clientPhone !== undefined ? { clientPhone: clientPhone || null } : {}),
         ...(status ? { status } : {}),
         ...timestampUpdates,
         ...(status === "FAILED" ? { failedAt: new Date(), failureReason } : {}),
@@ -163,6 +175,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (billed) {
       warning = "This job was already billed on an invoice — changing its status does not update or void that charge.";
     }
+  }
+
+  if (auth.session.role !== "ADMIN") {
+    const { clientPhone: _clientPhone, ...jobRest } = result;
+    return Response.json({ job: jobRest, ...(warning ? { warning } : {}) });
   }
 
   return Response.json({ job: result, ...(warning ? { warning } : {}) });

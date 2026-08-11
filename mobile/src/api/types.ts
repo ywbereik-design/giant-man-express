@@ -17,12 +17,22 @@ export const FAILURE_REASONS = [
 export type FailureReason = (typeof FAILURE_REASONS)[number];
 export type StaffRole = "ADMIN" | "DISPATCH" | "ACCOUNTANT";
 
+export const VEHICLE_TYPES = ["Truck", "Van"] as const;
+export type VehicleType = (typeof VEHICLE_TYPES)[number];
+
 export interface Driver {
   id: string;
   name: string;
   employeeCode: string;
   phone: string | null;
   active: boolean;
+  // Fleet/compliance details — all optional/nullable since existing drivers
+  // predate these fields.
+  vehicle?: VehicleType | null;
+  licenseNumber?: string | null;
+  // Plain YYYY-MM-DD, no time component — see backend DATE_ONLY_PATTERN.
+  licenseExpiry?: string | null;
+  licenseGrade?: string | null;
   // Present when fetched by staff (admin or dispatch) — whether the driver
   // currently has an open (not yet clocked out) shift.
   clockedIn?: boolean;
@@ -70,9 +80,12 @@ export interface JobType {
 export interface Business {
   id: string;
   name: string;
+  // Short admin-assigned lookup code (e.g. "ACME1") so dispatch can find a
+  // client by code instead of scrolling/searching a name list.
+  code?: string | null;
   // Dispatch gets a read-only, financial-detail-free view of businesses
-  // (id/name/address only) — these fields are absent, not just null, on
-  // that response shape.
+  // (id/name/code/address/phone only) — these fields are absent, not just
+  // null, on that response shape.
   contactName?: string | null;
   contactEmail?: string | null;
   phone?: string | null;
@@ -92,8 +105,11 @@ export interface Job {
   status: JobStatus;
   pickupAddress: string | null;
   // Recipient's phone, used for the driver's one-touch Call / WhatsApp
-  // buttons — null for jobs without a reachable contact on file.
-  clientPhone: string | null;
+  // buttons — null for jobs without a reachable contact on file. ADMIN-only
+  // field: absent entirely (not just null) on a Dispatch-fetched job, and
+  // Dispatch can't set it either — see the backend's Job.clientPhone
+  // schema comment.
+  clientPhone?: string | null;
   // Any number of delivery locations, in route order.
   dropoffStops: JobStop[];
   notes: string | null;

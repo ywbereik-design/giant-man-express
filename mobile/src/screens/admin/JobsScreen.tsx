@@ -3,6 +3,7 @@ import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, View,
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
 import { Business, Driver, Job, JobType } from "../../api/types";
+import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { AddressAutocompleteInput } from "../../components/AddressAutocompleteInput";
@@ -163,6 +164,12 @@ const JobRow = memo(function JobRow({
 });
 
 export function AdminJobsScreen() {
+  const { session } = useAuth();
+  // Client Phone is ADMIN-only, both to see and to set — the backend
+  // silently drops it from a Dispatch request and omits it from a
+  // Dispatch-fetched job entirely, so this just keeps the form from
+  // offering a field that would have no effect for that role.
+  const isAdmin = session?.role === "ADMIN";
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -246,25 +253,14 @@ export function AdminJobsScreen() {
     setDropoffAddresses((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : [""]));
   }
 
-  // Picking a business fills in its stored address and phone — most jobs
-  // are picked up from the client's own premises and their contact number
-  // is who the driver should reach at the address, so this saves
-  // re-typing details dispatch already has on file. Only fills an empty
-  // field, so it never clobbers something the dispatcher already typed
-  // (e.g. a different pickup point/contact than the client's own).
+  // Picking a business only sets which business this job bills to — it
+  // deliberately does NOT fill in the pickup address, even though the
+  // business record has one on file: the dispatcher types the actual
+  // pickup location for this specific job every time, since it can differ
+  // from the business's registered address (a different dock/warehouse,
+  // a one-off pickup point, etc.).
   function selectBusiness(id: string) {
-    if (id === businessId) {
-      setBusinessId(null);
-      return;
-    }
-    setBusinessId(id);
-    const business = businessOptions.find((b) => b.id === id);
-    if (business?.address && !pickupAddress.trim()) {
-      setPickupAddress(business.address);
-    }
-    if (business?.phone && !clientPhone.trim()) {
-      setClientPhone(business.phone);
-    }
+    setBusinessId(id === businessId ? null : id);
   }
 
   async function createJob() {
@@ -273,7 +269,7 @@ export function AdminJobsScreen() {
       setError("Title, job type, and driver are required");
       return;
     }
-    if (clientPhone.trim() && !isValidPhone(clientPhone.trim())) {
+    if (isAdmin && clientPhone.trim() && !isValidPhone(clientPhone.trim())) {
       setError("Enter a valid client phone number, or leave it blank");
       return;
     }
@@ -286,7 +282,7 @@ export function AdminJobsScreen() {
         businessId: businessId ?? undefined,
         pickupAddress: pickupAddress.trim() || undefined,
         dropoffAddresses: dropoffAddresses.map((a) => a.trim()).filter(Boolean),
-        clientPhone: clientPhone.trim() || undefined,
+        ...(isAdmin ? { clientPhone: clientPhone.trim() || undefined } : {}),
         notes: notes.trim() || undefined,
       });
       setTitle("");
@@ -372,7 +368,7 @@ export function AdminJobsScreen() {
 
             <Label>Business / Client (optional)</Label>
             <ChipSelect
-              options={businessOptions.map((b) => ({ id: b.id, label: b.name }))}
+              options={businessOptions.map((b) => ({ id: b.id, label: b.code ? `${b.code} — ${b.name}` : b.name }))}
               selectedId={businessId}
               onSelect={selectBusiness}
             />
@@ -399,13 +395,17 @@ export function AdminJobsScreen() {
             ))}
             <Button title="+ Add Delivery Stop" variant="secondary" onPress={addDropoffField} />
 
-            <Label>Client Phone (optional)</Label>
-            <FieldInput
-              value={clientPhone}
-              onChangeText={setClientPhone}
-              placeholder="+1 555 555 5555"
-              keyboardType="phone-pad"
-            />
+            {isAdmin && (
+              <>
+                <Label>Client Phone (optional)</Label>
+                <FieldInput
+                  value={clientPhone}
+                  onChangeText={setClientPhone}
+                  placeholder="+1 555 555 5555"
+                  keyboardType="phone-pad"
+                />
+              </>
+            )}
 
             <Label>Notes (optional)</Label>
             <FieldInput value={notes} onChangeText={setNotes} placeholder="Gate code, contact, etc." />

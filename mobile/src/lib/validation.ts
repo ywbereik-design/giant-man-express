@@ -13,3 +13,9 @@ export function isValidEmail(value: string): boolean {
 export function isValidPhone(value: string): boolean {
   return /^[\d+()\-.\s]{7,20}$/.test(value);
 }
+
+// Mirrors the backend's DATE_ONLY_PATTERN — a plain calendar date
+// (YYYY-MM-DD), no time component, used for driver license expiry.
+export function isValidDateOnly(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
