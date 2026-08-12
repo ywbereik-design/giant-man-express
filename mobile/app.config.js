@@ -43,9 +43,12 @@ const expoConfig = {
       package: "ca.giantmanexpress.app",
       versionCode: 1,
       adaptiveIcon: {
-        backgroundColor: "#E6F4FE",
+        // backgroundImage used to point at a leftover default Expo template
+        // asset (alignment guide circles, never actually replaced) — a
+        // plain backgroundColor is simpler and correct here. White to match
+        // the main icon.png's background.
+        backgroundColor: "#FFFFFF",
         foregroundImage: "./assets/android-icon-foreground.png",
-        backgroundImage: "./assets/android-icon-background.png",
         monochromeImage: "./assets/android-icon-monochrome.png",
       },
       predictiveBackGestureEnabled: false,
