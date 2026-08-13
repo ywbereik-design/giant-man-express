@@ -2,10 +2,9 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
-import { Driver, VEHICLE_TYPES, VehicleType } from "../../api/types";
+import { Driver } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
-import { ChipSelect } from "../../components/ChipSelect";
 import { PhotoThumbnail } from "../../components/PhotoViewer";
 import { isValidPhone, isValidDateOnly } from "../../lib/validation";
 import { formatDate, formatTime } from "../../lib/dateRange";
@@ -19,8 +18,6 @@ const JOB_STATUS_LABEL: Record<string, string> = {
   PICKED_UP: "Picked Up",
   ON_THE_WAY: "On the Way",
 };
-
-const VEHICLE_OPTIONS = VEHICLE_TYPES.map((v) => ({ id: v, label: v }));
 
 function isLicenseExpired(expiry: string): boolean {
   return new Date(expiry).getTime() < Date.now();
@@ -42,7 +39,7 @@ const DriverRow = memo(function DriverRow({
   editName,
   editPhone,
   editPin,
-  editVehicle,
+  editTruckResponsibility,
   editLicenseNumber,
   editLicenseExpiry,
   editLicenseGrade,
@@ -51,7 +48,7 @@ const DriverRow = memo(function DriverRow({
   onEditNameChange,
   onEditPhoneChange,
   onEditPinChange,
-  onEditVehicleChange,
+  onEditTruckResponsibilityChange,
   onEditLicenseNumberChange,
   onEditLicenseExpiryChange,
   onEditLicenseGradeChange,
@@ -69,7 +66,7 @@ const DriverRow = memo(function DriverRow({
   editName: string;
   editPhone: string;
   editPin: string;
-  editVehicle: string;
+  editTruckResponsibility: string;
   editLicenseNumber: string;
   editLicenseExpiry: string;
   editLicenseGrade: string;
@@ -78,7 +75,7 @@ const DriverRow = memo(function DriverRow({
   onEditNameChange: (v: string) => void;
   onEditPhoneChange: (v: string) => void;
   onEditPinChange: (v: string) => void;
-  onEditVehicleChange: (v: string) => void;
+  onEditTruckResponsibilityChange: (v: string) => void;
   onEditLicenseNumberChange: (v: string) => void;
   onEditLicenseExpiryChange: (v: string) => void;
   onEditLicenseGradeChange: (v: string) => void;
@@ -108,8 +105,12 @@ const DriverRow = memo(function DriverRow({
           placeholder="New 4-8 digit PIN"
           accessibilityLabel="Reset PIN"
         />
-        <Label>Assigned Vehicle (optional)</Label>
-        <ChipSelect options={VEHICLE_OPTIONS} selectedId={editVehicle || null} onSelect={onEditVehicleChange} />
+        <Label>Truck Responsibility (optional)</Label>
+        <FieldInput
+          value={editTruckResponsibility}
+          onChangeText={onEditTruckResponsibilityChange}
+          accessibilityLabel="Truck Responsibility"
+        />
         <Label>License Number (optional)</Label>
         <FieldInput value={editLicenseNumber} onChangeText={onEditLicenseNumberChange} accessibilityLabel="License Number" />
         <Label>License Expiry (optional, YYYY-MM-DD)</Label>
@@ -151,11 +152,11 @@ const DriverRow = memo(function DriverRow({
           )}
         </View>
       </View>
-      {(item.vehicle || item.licenseNumber || item.licenseExpiry || item.licenseGrade) && (
+      {(item.truckResponsibility || item.licenseNumber || item.licenseExpiry || item.licenseGrade) && (
         <View style={styles.jobRow}>
           <Text style={styles.meta}>
             {[
-              item.vehicle,
+              item.truckResponsibility,
               item.licenseGrade && `License ${item.licenseGrade}`,
               item.licenseNumber,
               item.licenseExpiry && `Expires ${formatDate(item.licenseExpiry)}`,
@@ -232,7 +233,7 @@ export function DriversScreen() {
   const [employeeCode, setEmployeeCode] = useState("");
   const [pin, setPin] = useState("");
   const [phone, setPhone] = useState("");
-  const [vehicle, setVehicle] = useState("");
+  const [truckResponsibility, setTruckResponsibility] = useState("");
   const [licenseNumber, setLicenseNumber] = useState("");
   const [licenseExpiry, setLicenseExpiry] = useState("");
   const [licenseGrade, setLicenseGrade] = useState("");
@@ -245,7 +246,7 @@ export function DriversScreen() {
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editPin, setEditPin] = useState("");
-  const [editVehicle, setEditVehicle] = useState("");
+  const [editTruckResponsibility, setEditTruckResponsibility] = useState("");
   const [editLicenseNumber, setEditLicenseNumber] = useState("");
   const [editLicenseExpiry, setEditLicenseExpiry] = useState("");
   const [editLicenseGrade, setEditLicenseGrade] = useState("");
@@ -313,7 +314,7 @@ export function DriversScreen() {
         employeeCode: employeeCode.trim(),
         pin: pin.trim(),
         phone: phone.trim() || undefined,
-        vehicle: (vehicle as VehicleType) || undefined,
+        truckResponsibility: truckResponsibility.trim() || undefined,
         licenseNumber: licenseNumber.trim() || undefined,
         licenseExpiry: licenseExpiry.trim() || undefined,
         licenseGrade: licenseGrade.trim() || undefined,
@@ -322,7 +323,7 @@ export function DriversScreen() {
       setEmployeeCode("");
       setPin("");
       setPhone("");
-      setVehicle("");
+      setTruckResponsibility("");
       setLicenseNumber("");
       setLicenseExpiry("");
       setLicenseGrade("");
@@ -405,7 +406,7 @@ export function DriversScreen() {
     setEditName(driver.name);
     setEditPhone(driver.phone ?? "");
     setEditPin("");
-    setEditVehicle(driver.vehicle ?? "");
+    setEditTruckResponsibility(driver.truckResponsibility ?? "");
     setEditLicenseNumber(driver.licenseNumber ?? "");
     setEditLicenseExpiry(driver.licenseExpiry ?? "");
     setEditLicenseGrade(driver.licenseGrade ?? "");
@@ -439,7 +440,7 @@ export function DriversScreen() {
           name: editName.trim(),
           phone: editPhone.trim() || undefined,
           ...(editPin.trim() ? { pin: editPin.trim() } : {}),
-          vehicle: (editVehicle as VehicleType) || undefined,
+          truckResponsibility: editTruckResponsibility.trim() || undefined,
           licenseNumber: editLicenseNumber.trim() || undefined,
           licenseExpiry: editLicenseExpiry.trim() || undefined,
           licenseGrade: editLicenseGrade.trim() || undefined,
@@ -459,7 +460,7 @@ export function DriversScreen() {
         setEditSaving(false);
       }
     },
-    [editName, editPhone, editPin, editVehicle, editLicenseNumber, editLicenseExpiry, editLicenseGrade]
+    [editName, editPhone, editPin, editTruckResponsibility, editLicenseNumber, editLicenseExpiry, editLicenseGrade]
   );
 
   const renderItem = useCallback(
@@ -475,7 +476,7 @@ export function DriversScreen() {
           editName={isEditing ? editName : ""}
           editPhone={isEditing ? editPhone : ""}
           editPin={isEditing ? editPin : ""}
-          editVehicle={isEditing ? editVehicle : ""}
+          editTruckResponsibility={isEditing ? editTruckResponsibility : ""}
           editLicenseNumber={isEditing ? editLicenseNumber : ""}
           editLicenseExpiry={isEditing ? editLicenseExpiry : ""}
           editLicenseGrade={isEditing ? editLicenseGrade : ""}
@@ -484,7 +485,7 @@ export function DriversScreen() {
           onEditNameChange={setEditName}
           onEditPhoneChange={setEditPhone}
           onEditPinChange={setEditPin}
-          onEditVehicleChange={setEditVehicle}
+          onEditTruckResponsibilityChange={setEditTruckResponsibility}
           onEditLicenseNumberChange={setEditLicenseNumber}
           onEditLicenseExpiryChange={setEditLicenseExpiry}
           onEditLicenseGradeChange={setEditLicenseGrade}
@@ -504,7 +505,7 @@ export function DriversScreen() {
       editName,
       editPhone,
       editPin,
-      editVehicle,
+      editTruckResponsibility,
       editLicenseNumber,
       editLicenseExpiry,
       editLicenseGrade,
@@ -553,8 +554,12 @@ export function DriversScreen() {
               />
               <Label>Phone (optional)</Label>
               <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />
-              <Label>Assigned Vehicle (optional)</Label>
-              <ChipSelect options={VEHICLE_OPTIONS} selectedId={vehicle || null} onSelect={setVehicle} />
+              <Label>Truck Responsibility (optional)</Label>
+              <FieldInput
+                value={truckResponsibility}
+                onChangeText={setTruckResponsibility}
+                placeholder="Truck #4 — plate ABC123"
+              />
               <Label>License Number (optional)</Label>
               <FieldInput value={licenseNumber} onChangeText={setLicenseNumber} accessibilityLabel="License Number" />
               <Label>License Expiry (optional, YYYY-MM-DD)</Label>

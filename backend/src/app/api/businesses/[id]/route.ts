@@ -9,7 +9,7 @@ import { MAX_BUSINESS_TEXT_LENGTH, MAX_BUSINESS_CODE_LENGTH, PHONE_PATTERN } fro
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(MAX_BUSINESS_TEXT_LENGTH).optional(),
   // "" explicitly clears the code back to unset — same convention as
-  // Driver's vehicle/license fields in /api/drivers/[id].
+  // Driver's truckResponsibility/license fields in /api/drivers/[id].
   code: z.union([z.string().trim().min(1).max(MAX_BUSINESS_CODE_LENGTH), z.literal("")]).optional(),
   contactName: z.string().trim().max(MAX_BUSINESS_TEXT_LENGTH).optional(),
   contactEmail: z.string().trim().toLowerCase().email().optional().or(z.literal("")),

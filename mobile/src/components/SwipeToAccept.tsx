@@ -119,8 +119,7 @@ export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: P
   }
 
   const accessibilityLabel = completed ? completedLabel : label;
-  const accessibilityProps = {
-    accessible: true,
+  const accessibilityActionProps = {
     accessibilityRole: "button" as const,
     accessibilityLabel,
     accessibilityState: { disabled: !interactive, busy },
@@ -136,7 +135,8 @@ export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: P
         style={styles.track}
         onPress={handleAccessibilityActivate}
         disabled={!interactive}
-        {...accessibilityProps}
+        accessible
+        {...accessibilityActionProps}
       >
         <Text style={styles.label} numberOfLines={1}>
           {accessibilityLabel}
@@ -145,19 +145,32 @@ export function SwipeToAccept({ label, completedLabel, onComplete, disabled }: P
     );
   }
 
+  // The whole track (not just the small thumb) is the gesture surface — a
+  // driver naturally drags from wherever they first touch, not necessarily
+  // the thumb's exact 56x56 hitbox, and handleGestureEvent already uses the
+  // gesture's relative translationX so it doesn't matter where the touch
+  // started. Also deliberately NOT `accessible` here (unlike the
+  // screen-reader Pressable above) — marking a live gesture surface as a
+  // single opaque accessibility element serves no purpose when no assistive
+  // tech is listening, and has been a known source of touch-dispatch
+  // interference on Android.
   return (
-    <View style={styles.track} onLayout={(e: LayoutChangeEvent) => setTrackWidth(e.nativeEvent.layout.width)} {...accessibilityProps}>
-      <Text style={styles.label} numberOfLines={1}>
-        {accessibilityLabel}
-      </Text>
-      {!completed && (
-        <PanGestureHandler onGestureEvent={handleGestureEvent} onHandlerStateChange={handleStateChange} enabled={interactive}>
+    <PanGestureHandler onGestureEvent={handleGestureEvent} onHandlerStateChange={handleStateChange} enabled={interactive}>
+      <View
+        style={styles.track}
+        onLayout={(e: LayoutChangeEvent) => setTrackWidth(e.nativeEvent.layout.width)}
+        {...accessibilityActionProps}
+      >
+        <Text style={styles.label} numberOfLines={1}>
+          {accessibilityLabel}
+        </Text>
+        {!completed && (
           <Animated.View style={[styles.thumb, { transform: [{ translateX }] }, (disabled || busy) && styles.thumbDisabled]}>
             <Ionicons name={busy ? "hourglass-outline" : "chevron-forward"} size={26} color={colors.primaryText} />
           </Animated.View>
-        </PanGestureHandler>
-      )}
-    </View>
+        )}
+      </View>
+    </PanGestureHandler>
   );
 }
 

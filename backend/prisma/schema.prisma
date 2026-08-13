@@ -43,13 +43,13 @@ model Driver {
   createdAt    DateTime @default(now())
 
   // Fleet/compliance details — all optional since existing drivers predate
-  // these fields and not every business tracks all of them. vehicle is a
-  // plain String (not a native Postgres enum), same convention as
-  // StaffUser.role, validated against VEHICLE_TYPES at the API layer.
-  vehicle       String?
-  licenseNumber String?
-  licenseExpiry DateTime?
-  licenseGrade  String?
+  // these fields and not every business tracks all of them.
+  // truckResponsibility is free text (not a closed list) — an admin can
+  // note whatever they need (a specific truck number, plate, description).
+  truckResponsibility String?
+  licenseNumber       String?
+  licenseExpiry       DateTime?
+  licenseGrade        String?
 
   // Denormalized "last known position", updated on every location ping while
   // clocked in — lets the admin driver list show a live position without

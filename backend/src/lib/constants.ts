@@ -82,11 +82,10 @@ export const MAX_DROPOFF_STOPS = 50;
 export const MAX_BUSINESS_TEXT_LENGTH = 300;
 export const MAX_JOB_TYPE_NAME_LENGTH = 100;
 
-// Vehicle assigned to a driver — a small fixed list rather than free text,
-// same reasoning as FAILURE_REASONS: keeps it consistent for dispatch to
-// scan/filter on instead of accumulating typo'd variants.
-export const VEHICLE_TYPES = ["Truck", "Van"] as const;
-export type VehicleType = (typeof VEHICLE_TYPES)[number];
+// Which truck a driver is responsible for — free text (a number, plate,
+// description, whatever an admin wants to note), not a fixed list, so it
+// just needs a reasonable length bound like the license fields below.
+export const MAX_TRUCK_RESPONSIBILITY_LENGTH = 100;
 
 // Driver license number/grade — short admin-entered identifiers, not
 // user-facing prose, so a tighter bound than MAX_BUSINESS_TEXT_LENGTH fits.

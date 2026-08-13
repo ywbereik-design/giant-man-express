@@ -135,7 +135,7 @@ describe("DELETE /api/drivers/[id]", () => {
 });
 
 describe("POST /api/drivers — fleet/compliance fields", () => {
-  it("creates a driver with vehicle, license number, expiry, and grade", async () => {
+  it("creates a driver with truckResponsibility, license number, expiry, and grade", async () => {
     const { staff } = await createStaff({ role: "ADMIN" });
     const token = await tokenFor(staff.id, "ADMIN", staff.name);
 
@@ -147,7 +147,7 @@ describe("POST /api/drivers — fleet/compliance fields", () => {
           name: "Fleet Test Driver",
           employeeCode: `FLEET-${Date.now()}`,
           pin: "4321",
-          vehicle: "Van",
+          truckResponsibility: "Truck #4 — plate ABC123",
           licenseNumber: "L1234567",
           licenseExpiry: "2027-06-30",
           licenseGrade: "G",
@@ -157,7 +157,7 @@ describe("POST /api/drivers — fleet/compliance fields", () => {
     );
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.driver.vehicle).toBe("Van");
+    expect(body.driver.truckResponsibility).toBe("Truck #4 — plate ABC123");
     expect(body.driver.licenseNumber).toBe("L1234567");
     expect(body.driver.licenseExpiry).toBe("2027-06-30T00:00:00.000Z");
     expect(body.driver.licenseGrade).toBe("G");
@@ -177,11 +177,11 @@ describe("POST /api/drivers — fleet/compliance fields", () => {
     );
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.driver.vehicle).toBeNull();
+    expect(body.driver.truckResponsibility).toBeNull();
     expect(body.driver.licenseExpiry).toBeNull();
   });
 
-  it("rejects a vehicle value outside the fixed Truck/Van list", async () => {
+  it("rejects a truckResponsibility over the length bound", async () => {
     const { staff } = await createStaff({ role: "ADMIN" });
     const token = await tokenFor(staff.id, "ADMIN", staff.name);
 
@@ -189,7 +189,7 @@ describe("POST /api/drivers — fleet/compliance fields", () => {
       jsonRequest(
         "/api/drivers",
         "POST",
-        { name: "Bad Vehicle", employeeCode: `BADVEH-${Date.now()}`, pin: "4321", vehicle: "Motorcycle" },
+        { name: "Too Long", employeeCode: `TOOLONG-${Date.now()}`, pin: "4321", truckResponsibility: "x".repeat(101) },
         token
       )
     );
@@ -222,14 +222,14 @@ describe("PATCH /api/drivers/[id] — fleet/compliance fields", () => {
       jsonRequest(
         `/api/drivers/${driver.id}`,
         "PATCH",
-        { vehicle: "Truck", licenseNumber: "T-999", licenseExpiry: "2026-12-31", licenseGrade: "AZ" },
+        { truckResponsibility: "Truck #2", licenseNumber: "T-999", licenseExpiry: "2026-12-31", licenseGrade: "AZ" },
         token
       ),
       { params: { id: driver.id } }
     );
     expect(setRes.status).toBe(200);
     const setBody = await setRes.json();
-    expect(setBody.driver.vehicle).toBe("Truck");
+    expect(setBody.driver.truckResponsibility).toBe("Truck #2");
     expect(setBody.driver.licenseGrade).toBe("AZ");
 
     // Empty string explicitly clears each field back to null.
@@ -237,14 +237,14 @@ describe("PATCH /api/drivers/[id] — fleet/compliance fields", () => {
       jsonRequest(
         `/api/drivers/${driver.id}`,
         "PATCH",
-        { vehicle: "", licenseNumber: "", licenseExpiry: "", licenseGrade: "" },
+        { truckResponsibility: "", licenseNumber: "", licenseExpiry: "", licenseGrade: "" },
         token
       ),
       { params: { id: driver.id } }
     );
     expect(clearRes.status).toBe(200);
     const clearBody = await clearRes.json();
-    expect(clearBody.driver.vehicle).toBeNull();
+    expect(clearBody.driver.truckResponsibility).toBeNull();
     expect(clearBody.driver.licenseNumber).toBeNull();
     expect(clearBody.driver.licenseExpiry).toBeNull();
     expect(clearBody.driver.licenseGrade).toBeNull();

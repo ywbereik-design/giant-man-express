@@ -8,7 +8,7 @@ import { roundKm, startOfTodayUTC } from "@/lib/geo";
 import {
   PHONE_PATTERN,
   SHIFT_PHOTO_EXPIRY_MS,
-  VEHICLE_TYPES,
+  MAX_TRUCK_RESPONSIBILITY_LENGTH,
   MAX_LICENSE_TEXT_LENGTH,
   DATE_ONLY_PATTERN,
 } from "@/lib/constants";
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       currentLat: true,
       currentLng: true,
       currentLocationAt: true,
-      vehicle: true,
+      truckResponsibility: true,
       licenseNumber: true,
       licenseExpiry: true,
       licenseGrade: true,
@@ -137,7 +137,7 @@ const createSchema = z.object({
     .max(8)
     .regex(/^\d+$/, "PIN must contain digits only"),
   phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
-  vehicle: z.enum(VEHICLE_TYPES).optional(),
+  truckResponsibility: z.string().trim().max(MAX_TRUCK_RESPONSIBILITY_LENGTH).optional(),
   licenseNumber: z.string().trim().max(MAX_LICENSE_TEXT_LENGTH).optional(),
   licenseExpiry: z.string().regex(DATE_ONLY_PATTERN, "Use YYYY-MM-DD format").optional(),
   licenseGrade: z.string().trim().max(MAX_LICENSE_TEXT_LENGTH).optional(),
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
 
   const body = await parseBody(req, createSchema);
   if (isError(body)) return body.error;
-  const { name, employeeCode, pin, phone, vehicle, licenseNumber, licenseExpiry, licenseGrade } = body.data;
+  const { name, employeeCode, pin, phone, truckResponsibility, licenseNumber, licenseExpiry, licenseGrade } = body.data;
 
   const existing = await prisma.driver.findUnique({ where: { employeeCode } });
   if (existing) {
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
         employeeCode,
         phone,
         pinHash,
-        vehicle,
+        truckResponsibility,
         licenseNumber,
         licenseExpiry: licenseExpiry ? new Date(licenseExpiry) : undefined,
         licenseGrade,
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
         employeeCode: result.employeeCode,
         phone: result.phone,
         active: result.active,
-        vehicle: result.vehicle,
+        truckResponsibility: result.truckResponsibility,
         licenseNumber: result.licenseNumber,
         licenseExpiry: result.licenseExpiry,
         licenseGrade: result.licenseGrade,

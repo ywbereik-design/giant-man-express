@@ -17,9 +17,6 @@ export const FAILURE_REASONS = [
 export type FailureReason = (typeof FAILURE_REASONS)[number];
 export type StaffRole = "ADMIN" | "DISPATCH" | "ACCOUNTANT";
 
-export const VEHICLE_TYPES = ["Truck", "Van"] as const;
-export type VehicleType = (typeof VEHICLE_TYPES)[number];
-
 export interface Driver {
   id: string;
   name: string;
@@ -27,8 +24,9 @@ export interface Driver {
   phone: string | null;
   active: boolean;
   // Fleet/compliance details — all optional/nullable since existing drivers
-  // predate these fields.
-  vehicle?: VehicleType | null;
+  // predate these fields. truckResponsibility is free text (a truck number,
+  // plate, description — whatever an admin wants to note), not a fixed list.
+  truckResponsibility?: string | null;
   licenseNumber?: string | null;
   // Plain YYYY-MM-DD, no time component — see backend DATE_ONLY_PATTERN.
   licenseExpiry?: string | null;
