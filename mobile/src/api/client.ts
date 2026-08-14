@@ -2,9 +2,14 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:4
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  // Machine-readable error identifier some routes send alongside `error`
+  // (e.g. "HAS_HISTORY" vs "INVOICED" on DELETE /api/drivers/:id) — lets a
+  // caller branch on the exact failure reason instead of parsing message text.
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -61,16 +66,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
+    let code: string | undefined;
     try {
       const body = await res.json();
       if (body?.error) message = body.error;
+      if (typeof body?.code === "string") code = body.code;
     } catch {
       // ignore
     }
     if (res.status === 401 && hadToken) {
       onSessionExpired?.();
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, code);
   }
 
   if (res.status === 204) return undefined as T;

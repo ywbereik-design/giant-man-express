@@ -67,16 +67,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return Response.json({ driver: result });
 }
 
-// Deliberately not a cascade delete — Job/TimeEntry/HoursReport all
-// reference Driver with ON DELETE RESTRICT (see the schema/migrations), so
-// a driver with any real history can't be deleted at the DB level regardless.
-// This check exists to turn that into a clean, correct error message instead
-// of a generic "referenced record" one, and to make the actual rule explicit:
-// only a driver with zero jobs/shifts/reports (e.g. one added by mistake and
-// never used) can be deleted here. Anyone with real history must be
-// deactivated instead — full removal of an active driver's history is a
-// deliberate, one-off operation, not something a single tap in the app
-// should be able to trigger.
+// A driver with real history (jobs/shifts/reports) is refused by default —
+// the app surfaces this as a "delete anyway?" confirmation rather than a
+// dead end, and a confirmed retry sends ?force=true, which cascades through
+// LocationPing/Job/TimeEntry/HoursReport before removing the driver itself.
+// One case stays refused even with force: a job that's already a line item
+// on an issued invoice. Deleting that job would leave a real, already-sent
+// client invoice referencing a job that no longer exists — silently
+// corrupting a financial record — so that one requires resolving the
+// invoice first, not just an admin confirming a bigger warning dialog.
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(req, "ADMIN");
   if ("error" in auth) return auth.error;
@@ -84,19 +83,48 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const driver = await prisma.driver.findUnique({ where: { id: params.id } });
   if (!driver) return Response.json({ error: "Not found" }, { status: 404 });
 
+  const invoicedJobCount = await prisma.invoiceLineItem.count({
+    where: { job: { driverId: params.id } },
+  });
+  if (invoicedJobCount > 0) {
+    return Response.json(
+      {
+        error: `This driver has ${invoicedJobCount} job(s) already on an issued invoice and can't be deleted — resolve those invoices first.`,
+        code: "INVOICED",
+      },
+      { status: 409 }
+    );
+  }
+
+  const force = new URL(req.url).searchParams.get("force") === "true";
+
   const [jobCount, timeEntryCount, hoursReportCount] = await Promise.all([
     prisma.job.count({ where: { driverId: params.id } }),
     prisma.timeEntry.count({ where: { driverId: params.id } }),
     prisma.hoursReport.count({ where: { driverId: params.id } }),
   ]);
-  if (jobCount > 0 || timeEntryCount > 0 || hoursReportCount > 0) {
+  const hasHistory = jobCount > 0 || timeEntryCount > 0 || hoursReportCount > 0;
+  if (hasHistory && !force) {
     return Response.json(
-      { error: "This driver has job or shift history and can't be deleted — deactivate them instead." },
+      {
+        error: "This driver has job or shift history. Deleting will permanently remove all of it — jobs, clock-ins, location history, and reports. This cannot be undone.",
+        code: "HAS_HISTORY",
+      },
       { status: 409 }
     );
   }
 
-  const result = await runOrRespond(() => prisma.driver.delete({ where: { id: params.id } }));
+  const result = await runOrRespond(async () => {
+    if (!hasHistory) return prisma.driver.delete({ where: { id: params.id } });
+    const [, , , , deletedDriver] = await prisma.$transaction([
+      prisma.locationPing.deleteMany({ where: { driverId: params.id } }),
+      prisma.job.deleteMany({ where: { driverId: params.id } }), // JobStop rows cascade
+      prisma.timeEntry.deleteMany({ where: { driverId: params.id } }),
+      prisma.hoursReport.deleteMany({ where: { driverId: params.id } }),
+      prisma.driver.delete({ where: { id: params.id } }),
+    ]);
+    return deletedDriver;
+  });
   if (isResponse(result)) return result;
 
   return Response.json({ ok: true });
