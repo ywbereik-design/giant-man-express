@@ -76,6 +76,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 // client invoice referencing a job that no longer exists — silently
 // corrupting a financial record — so that one requires resolving the
 // invoice first, not just an admin confirming a bigger warning dialog.
+function invoicedErrorResponse(count: number) {
+  return Response.json(
+    {
+      error: `This driver has ${count} job(s) already on an issued invoice and can't be deleted — resolve those invoices first.`,
+      code: "INVOICED",
+    },
+    { status: 409 }
+  );
+}
+
+// Thrown from inside the delete transaction below when the invoice re-check
+// there finds a job that got billed after the earlier pre-check already
+// passed — see the comment on that re-check for why it's needed.
+class DriverInvoicedGuardError extends Error {
+  constructor(public count: number) {
+    super(`Driver has ${count} newly-invoiced job(s)`);
+  }
+}
+
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole(req, "ADMIN");
   if ("error" in auth) return auth.error;
@@ -87,13 +106,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     where: { job: { driverId: params.id } },
   });
   if (invoicedJobCount > 0) {
-    return Response.json(
-      {
-        error: `This driver has ${invoicedJobCount} job(s) already on an issued invoice and can't be deleted — resolve those invoices first.`,
-        code: "INVOICED",
-      },
-      { status: 409 }
-    );
+    return invoicedErrorResponse(invoicedJobCount);
   }
 
   const force = new URL(req.url).searchParams.get("force") === "true";
@@ -114,18 +127,36 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     );
   }
 
-  const result = await runOrRespond(async () => {
-    if (!hasHistory) return prisma.driver.delete({ where: { id: params.id } });
-    const [, , , , deletedDriver] = await prisma.$transaction([
-      prisma.locationPing.deleteMany({ where: { driverId: params.id } }),
-      prisma.job.deleteMany({ where: { driverId: params.id } }), // JobStop rows cascade
-      prisma.timeEntry.deleteMany({ where: { driverId: params.id } }),
-      prisma.hoursReport.deleteMany({ where: { driverId: params.id } }),
-      prisma.driver.delete({ where: { id: params.id } }),
-    ]);
-    return deletedDriver;
-  });
-  if (isResponse(result)) return result;
+  try {
+    const result = await runOrRespond(async () => {
+      if (!hasHistory) return prisma.driver.delete({ where: { id: params.id } });
+      return prisma.$transaction(async (tx) => {
+        // Re-check right before deleting, inside the same transaction as the
+        // delete itself — the count above ran before this transaction even
+        // opened, so a job could have been billed on a brand-new invoice (see
+        // POST /api/invoices) in the gap between that check and this write.
+        // Job.invoiceLineItems' FK is ON DELETE SET NULL (not RESTRICT), so
+        // without this re-check the deleteMany below would succeed and
+        // silently orphan that invoice line item (jobId -> null) instead of
+        // failing loudly — exactly the "corrupting a financial record"
+        // outcome this route exists to prevent.
+        const stillInvoiced = await tx.invoiceLineItem.count({ where: { job: { driverId: params.id } } });
+        if (stillInvoiced > 0) throw new DriverInvoicedGuardError(stillInvoiced);
 
-  return Response.json({ ok: true });
+        await tx.locationPing.deleteMany({ where: { driverId: params.id } });
+        await tx.job.deleteMany({ where: { driverId: params.id } }); // JobStop rows cascade
+        await tx.timeEntry.deleteMany({ where: { driverId: params.id } });
+        await tx.hoursReport.deleteMany({ where: { driverId: params.id } });
+        return tx.driver.delete({ where: { id: params.id } });
+      });
+    });
+    if (isResponse(result)) return result;
+
+    return Response.json({ ok: true });
+  } catch (err) {
+    if (err instanceof DriverInvoicedGuardError) {
+      return invoicedErrorResponse(err.count);
+    }
+    throw err;
+  }
 }

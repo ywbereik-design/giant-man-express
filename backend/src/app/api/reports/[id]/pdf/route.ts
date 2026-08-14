@@ -12,7 +12,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const report = await prisma.hoursReport.findUnique({
     where: { id: params.id },
-    include: { driver: true },
+    // Only name/employeeCode are ever read below — an explicit select (not
+    // `driver: true`) keeps pinHash out of memory here at all, matching
+    // safeDriverSelect's use everywhere else a driver is joined in.
+    include: { driver: { select: { name: true, employeeCode: true } } },
   });
   if (!report) return Response.json({ error: "Not found" }, { status: 404 });
 

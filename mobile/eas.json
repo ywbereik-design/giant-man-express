@@ -16,6 +16,9 @@
       "channel": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://giant-man-express-1.onrender.com"
       }
     },
     "production": {
@@ -23,6 +26,9 @@
       "channel": "production",
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://giant-man-express-1.onrender.com"
       }
     }
   },

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { GET as listDrivers, POST as createDriverRoute } from "@/app/api/drivers/route";
 import { PATCH as updateDriver, DELETE as deleteDriver } from "@/app/api/drivers/[id]/route";
@@ -189,6 +189,66 @@ describe("DELETE /api/drivers/[id]", () => {
     expect(body.code).toBe("INVOICED");
     expect(await prisma.driver.findUnique({ where: { id: driver.id } })).not.toBeNull();
     expect(await prisma.job.findUnique({ where: { id: job.id } })).not.toBeNull();
+  });
+
+  it("refuses (and doesn't corrupt data) when a job gets invoiced in the race window between the pre-check and the delete transaction", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness();
+    const job = await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      deliveredAt: new Date(),
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    // The route's pre-check (outside the transaction) passes here — this job
+    // isn't invoiced yet. Simulate a concurrent POST /api/invoices committing
+    // in the gap between that check and the delete transaction by hooking
+    // $transaction (the only prisma method the route calls in between) to
+    // land the competing invoice — for real, as its own committed write —
+    // right before the real delete transaction (with its in-transaction
+    // re-check) actually starts.
+    const realTransaction = prisma.$transaction.bind(prisma);
+    const txSpy = vi.spyOn(prisma, "$transaction");
+    txSpy.mockImplementationOnce(async (fn: unknown, ...rest: unknown[]) => {
+      const invoice = await prisma.invoice.create({
+        data: {
+          invoiceNumber: `INV-RACE-${Date.now()}`,
+          businessId: business.id,
+          periodStart: new Date(),
+          periodEnd: new Date(),
+          totalAmount: 50,
+        },
+      });
+      await prisma.invoiceLineItem.create({
+        data: { invoiceId: invoice.id, jobId: job.id, description: "Delivery", quantity: 1, rate: 50, amount: 50 },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (realTransaction as any)(fn, ...rest);
+    });
+
+    try {
+      const res = await deleteDriver(jsonRequest(`/api/drivers/${driver.id}?force=true`, "DELETE", undefined, token), {
+        params: { id: driver.id },
+      });
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.code).toBe("INVOICED");
+    } finally {
+      txSpy.mockRestore();
+    }
+
+    // Job.invoiceLineItems' FK is ON DELETE SET NULL, not RESTRICT — without
+    // the in-transaction re-check, the job (and its invoice line item's
+    // jobId) would have been silently deleted/nulled instead of refused.
+    expect(await prisma.driver.findUnique({ where: { id: driver.id } })).not.toBeNull();
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).not.toBeNull();
+    const lineItem = await prisma.invoiceLineItem.findFirst({ where: { jobId: job.id } });
+    expect(lineItem).not.toBeNull();
   });
 
   it("rejects a non-admin session", async () => {
