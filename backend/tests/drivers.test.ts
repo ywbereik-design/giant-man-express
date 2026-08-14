@@ -3,7 +3,16 @@ import { prisma } from "@/lib/db";
 import { GET as listDrivers, POST as createDriverRoute } from "@/app/api/drivers/route";
 import { PATCH as updateDriver, DELETE as deleteDriver } from "@/app/api/drivers/[id]/route";
 import { GET as driverStatus } from "@/app/api/driver/status/route";
-import { createStaff, createDriver, createJobType, createJob, tokenFor, jsonRequest, getRequest } from "./helpers";
+import {
+  createStaff,
+  createDriver,
+  createJobType,
+  createJob,
+  createBusiness,
+  tokenFor,
+  jsonRequest,
+  getRequest,
+} from "./helpers";
 
 describe("GET /api/drivers", () => {
   // The test DB is only truncated once per whole `vitest run`, so other
@@ -84,7 +93,7 @@ describe("DELETE /api/drivers/[id]", () => {
     expect(await prisma.driver.findUnique({ where: { id: driver.id } })).toBeNull();
   });
 
-  it("refuses to delete a driver with job history, telling the admin to deactivate instead", async () => {
+  it("refuses to delete a driver with job history unless force=true is passed", async () => {
     const { staff } = await createStaff({ role: "ADMIN" });
     const { driver } = await createDriver();
     const jobType = await createJobType();
@@ -96,7 +105,7 @@ describe("DELETE /api/drivers/[id]", () => {
     });
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.error).toMatch(/deactivate/i);
+    expect(body.code).toBe("HAS_HISTORY");
     expect(await prisma.driver.findUnique({ where: { id: driver.id } })).not.toBeNull();
   });
 
@@ -110,6 +119,76 @@ describe("DELETE /api/drivers/[id]", () => {
       params: { id: driver.id },
     });
     expect(res.status).toBe(409);
+  });
+
+  it("cascades through jobs, time entries, location pings, and hours reports when force=true", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: driver.id, jobTypeId: jobType.id });
+    const timeEntry = await prisma.timeEntry.create({
+      data: { driverId: driver.id, clockInAt: new Date(), distanceKm: 0 },
+    });
+    await prisma.locationPing.create({
+      data: { driverId: driver.id, timeEntryId: timeEntry.id, lat: 45.0, lng: -75.0 },
+    });
+    await prisma.hoursReport.create({
+      data: {
+        reportNumber: `HR-FORCE-${Date.now()}`,
+        driverId: driver.id,
+        periodStart: new Date(),
+        periodEnd: new Date(),
+        totalHours: 1,
+        entriesJson: "[]",
+      },
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await deleteDriver(jsonRequest(`/api/drivers/${driver.id}?force=true`, "DELETE", undefined, token), {
+      params: { id: driver.id },
+    });
+    expect(res.status).toBe(200);
+    expect(await prisma.driver.findUnique({ where: { id: driver.id } })).toBeNull();
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).toBeNull();
+    expect(await prisma.timeEntry.findUnique({ where: { id: timeEntry.id } })).toBeNull();
+    expect(await prisma.locationPing.findMany({ where: { driverId: driver.id } })).toHaveLength(0);
+    expect(await prisma.hoursReport.findMany({ where: { driverId: driver.id } })).toHaveLength(0);
+  });
+
+  it("refuses to delete a driver's already-invoiced job even with force=true", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness();
+    const job = await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      deliveredAt: new Date(),
+    });
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber: `INV-FORCE-${Date.now()}`,
+        businessId: business.id,
+        periodStart: new Date(),
+        periodEnd: new Date(),
+        totalAmount: 50,
+      },
+    });
+    await prisma.invoiceLineItem.create({
+      data: { invoiceId: invoice.id, jobId: job.id, description: "Delivery", quantity: 1, rate: 50, amount: 50 },
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await deleteDriver(jsonRequest(`/api/drivers/${driver.id}?force=true`, "DELETE", undefined, token), {
+      params: { id: driver.id },
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe("INVOICED");
+    expect(await prisma.driver.findUnique({ where: { id: driver.id } })).not.toBeNull();
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).not.toBeNull();
   });
 
   it("rejects a non-admin session", async () => {

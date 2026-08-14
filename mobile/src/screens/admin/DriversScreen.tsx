@@ -371,16 +371,26 @@ export function DriversScreen() {
     [toggleActive]
   );
 
-  const deleteDriver = useCallback(async (driver: Driver) => {
+  // force=true is only ever sent as a deliberate second confirmation (see
+  // confirmDeleteDriver below) — the backend cascades through this driver's
+  // location pings, jobs, time entries, and hours reports before removing
+  // the driver row. The one failure force can't get past is an already-
+  // invoiced job (code "INVOICED") — that's a real client billing record,
+  // not just history, and has to be resolved manually instead.
+  const deleteDriver = useCallback(async (driver: Driver, force: boolean) => {
     setDeletingId(driver.id);
     setError(null);
     try {
-      await api.delete(`/api/drivers/${driver.id}`);
+      await api.delete(`/api/drivers/${driver.id}${force ? "?force=true" : ""}`);
       setDrivers((prev) => prev.filter((d) => d.id !== driver.id));
     } catch (e) {
-      // The backend refuses (409) if this driver has any job/shift/report
-      // history — that message ("...deactivate them instead") is exactly
-      // what should surface here, not a generic fallback.
+      if (!force && e instanceof ApiError && e.code === "HAS_HISTORY") {
+        Alert.alert("This driver has job/shift history", e.message, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete Everything", style: "destructive", onPress: () => deleteDriver(driver, true) },
+        ]);
+        return;
+      }
       setError(e instanceof ApiError ? e.message : "Could not delete driver");
     } finally {
       setDeletingId(null);
@@ -389,14 +399,10 @@ export function DriversScreen() {
 
   const confirmDeleteDriver = useCallback(
     (driver: Driver) => {
-      Alert.alert(
-        "Delete this driver?",
-        `"${driver.name}" will be permanently deleted. This only works if they have no job or shift history — otherwise, deactivate instead.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: () => deleteDriver(driver) },
-        ]
-      );
+      Alert.alert("Delete this driver?", `"${driver.name}" will be permanently deleted.`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => deleteDriver(driver, false) },
+      ]);
     },
     [deleteDriver]
   );
