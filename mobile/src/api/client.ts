@@ -31,7 +31,13 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
 
 // Exported so other network calls outside this client (e.g. downloadAndShare.ts's
 // PDF fetch) apply the same timeout instead of hanging forever on a stalled connection.
-export const REQUEST_TIMEOUT_MS = 15000;
+// Generous rather than snappy — the backend runs on Render's free tier, which
+// spins the server down after ~15 minutes idle and can take 30-60+ seconds to
+// wake back up on the next request. A short timeout here turns that normal
+// (if slow) wake-up into a hard, misleading "request timed out" failure for
+// whichever driver/staff member happens to be the first to open the app after
+// a gap, even though retrying moments later would have worked fine.
+export const REQUEST_TIMEOUT_MS = 45000;
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const hadToken = !!authToken;
