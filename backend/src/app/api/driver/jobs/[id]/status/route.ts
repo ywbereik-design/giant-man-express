@@ -95,14 +95,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const geoFields = GEO_FIELDS_ON[nextStatus];
 
-  // Re-checks status in the WHERE clause at write time, not just at the read
-  // above — otherwise two concurrent requests for the same job (a client
-  // retry racing an offline-queue replay, or a genuine double-tap) could
-  // both pass the transition check against the same stale read and both
-  // write, silently discarding one request's photo/geo/timestamp data.
-  // Mirrors the same guard already used in batch-status/route.ts.
+  // Re-checks status *and* driverId in the WHERE clause at write time, not
+  // just at the read above:
+  //  - status: otherwise two concurrent requests for the same job (a client
+  //    retry racing an offline-queue replay, or a genuine double-tap) could
+  //    both pass the transition check against the same stale read and both
+  //    write, silently discarding one request's photo/geo/timestamp data.
+  //  - driverId: the ownership check above (job.driverId !== auth.session.sub)
+  //    is the same kind of stale read — if PATCH /api/jobs/[id] reassigns
+  //    this job to a different driver in the gap between that read and this
+  //    write, id+status alone would still match and let the now-unassigned
+  //    driver write a status/photo/geo update onto a job that's no longer
+  //    theirs. Mirrors the same guard already used in batch-status/route.ts.
   const result = await prisma.job.updateMany({
-    where: { id: params.id, status: job.status },
+    where: { id: params.id, status: job.status, driverId: auth.session.sub },
     data: {
       status: nextStatus,
       [TIMESTAMP_FIELD[nextStatus]]: new Date(),

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { NextRequest } from "next/server";
 import { POST as createBusiness } from "@/app/api/businesses/route";
 import { PATCH as updateBusiness } from "@/app/api/businesses/[id]/route";
 import { createStaff, createBusiness as createBusinessRow, tokenFor, jsonRequest } from "./helpers";
@@ -88,6 +89,29 @@ describe("POST /api/businesses", () => {
     const res = await createBusiness(
       jsonRequest("/api/businesses", "POST", { name: "Bad Billing", billingType: "PER_MONTH" }, token)
     );
+    expect(res.status).toBe(400);
+  });
+
+  // Plain z.number().positive() accepts Infinity (it's a positive number as
+  // far as JS/zod are concerned) — Postgres' float8 billingRate column would
+  // happily store it, silently producing an Infinity totalAmount on every
+  // invoice generated for this business afterward. JSON itself can't encode
+  // a literal Infinity (JSON.stringify(Infinity) serializes to "null", which
+  // wouldn't exercise this at all), but a numeric literal that overflows
+  // double precision — e.g. 1e400 — parses to Infinity via plain JSON.parse,
+  // same as body parsing in parseBody/req.json() does here, so the request
+  // body is built by hand rather than through the jsonRequest/JSON.stringify
+  // helper.
+  it("rejects a billingRate that overflows to Infinity", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const req = new NextRequest("http://localhost:4000/api/businesses", {
+      method: "POST",
+      body: '{"name":"Infinite Co","billingRate":1e400}',
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    });
+    const res = await createBusiness(req);
     expect(res.status).toBe(400);
   });
 });

@@ -15,7 +15,9 @@ const updateSchema = z.object({
   contactEmail: z.string().trim().toLowerCase().email().optional().or(z.literal("")),
   phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   address: z.string().trim().max(MAX_BUSINESS_TEXT_LENGTH).optional(),
-  billingRate: z.number().positive().optional(),
+  // See the matching comment in ../route.ts's createSchema — .finite() blocks
+  // Infinity, which bare .positive() lets through.
+  billingRate: z.number().positive().finite().optional(),
   billingType: z.enum(BILLING_TYPES).optional(),
 });
 

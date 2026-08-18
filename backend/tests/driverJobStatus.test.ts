@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { PATCH as updateStatus } from "@/app/api/driver/jobs/[id]/status/route";
 import { prisma } from "@/lib/db";
 import { createDriver, createJobType, createJob, tokenFor, jsonRequest, FAKE_PHOTO } from "./helpers";
@@ -210,5 +210,39 @@ describe("PATCH /api/driver/jobs/[id]/status", () => {
       params: { id: job.id },
     });
     expect(res.status).toBe(404);
+  });
+
+  it("blocks the write if the job is reassigned to a different driver between the ownership read and the update", async () => {
+    // The route's ownership check (job.driverId !== auth.session.sub) reads
+    // the job once, up front. If PATCH /api/jobs/[id] reassigns this job to
+    // another driver in the gap before the write actually lands, id+status
+    // alone used to still match in the updateMany's WHERE clause, letting the
+    // now-unassigned driver push a status/photo/geo update onto a job that's
+    // no longer theirs. Simulated deterministically here (rather than via
+    // Promise.all, whose interleaving isn't guaranteed) by making the read
+    // return a stale snapshot while a real reassignment happens in between.
+    const { driver: originalDriver } = await createDriver();
+    const { driver: newDriver } = await createDriver();
+    const jobType = await createJobType();
+    const job = await createJob({ driverId: originalDriver.id, jobTypeId: jobType.id, status: "ASSIGNED" });
+    const token = await driverToken(originalDriver.id, originalDriver.name);
+
+    const staleSnapshot = await prisma.job.findUnique({ where: { id: job.id } });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const spy = vi.spyOn(prisma.job, "findUnique").mockImplementationOnce((async () => {
+      await prisma.job.update({ where: { id: job.id }, data: { driverId: newDriver.id } });
+      return staleSnapshot;
+    }) as any);
+
+    const res = await updateStatus(
+      jsonRequest(`/api/driver/jobs/${job.id}/status`, "PATCH", { status: "ACCEPTED" }, token),
+      { params: { id: job.id } }
+    );
+    spy.mockRestore();
+
+    expect(res.status).toBe(409);
+    const final = await prisma.job.findUnique({ where: { id: job.id } });
+    expect(final?.status).toBe("ASSIGNED");
+    expect(final?.driverId).toBe(newDriver.id);
   });
 });

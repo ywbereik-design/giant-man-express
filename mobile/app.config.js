@@ -100,6 +100,16 @@ const expoConfig = {
       // dev build is just a static release build with no way to connect
       // back to `npx expo start`.
       "expo-dev-client",
+      // Without this, `expo prebuild` (which every EAS build runs fresh —
+      // there's no checked-in android/ios directory) never applies
+      // expo-updates' own config plugin, so the native Info.plist/
+      // AndroidManifest never gets the `updates.url`/runtimeVersion below
+      // embedded into them. The app would still build and run fine, but
+      // every real installed build would have no update URL baked in at
+      // all, silently breaking the entire EAS Update workflow (see the
+      // `updates` field below) — an `eas update` publish would never reach
+      // a single device, with no error surfaced anywhere.
+      "expo-updates",
     ],
 };
 

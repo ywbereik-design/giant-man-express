@@ -73,13 +73,19 @@ export async function PATCH(req: NextRequest) {
 
   let updatedIds: string[] = [];
   if (updatable.length > 0 && sourceStatus) {
-    // Re-checks status in the WHERE clause at write time, not just at the
-    // read above — a job that raced to a different status in between (e.g.
-    // a single-job update, including one replayed from the driver's offline
-    // queue) simply won't match and is silently excluded here rather than
-    // having its status forced backward with a now-inconsistent timestamp.
+    // Re-checks status *and* driverId in the WHERE clause at write time, not
+    // just at the read above:
+    //  - status: a job that raced to a different status in between (e.g. a
+    //    single-job update, including one replayed from the driver's offline
+    //    queue) simply won't match and is silently excluded here rather than
+    //    having its status forced backward with a now-inconsistent timestamp.
+    //  - driverId: the driverId filter on the read above (jobs = findMany
+    //    where driverId: auth.session.sub) is only as fresh as that read —
+    //    if PATCH /api/jobs/[id] reassigns one of these jobs to a different
+    //    driver in the gap between that read and this write, id+status alone
+    //    would still match and let the now-unassigned driver push it forward.
     const result = await prisma.job.updateMany({
-      where: { id: { in: updatable }, status: sourceStatus },
+      where: { id: { in: updatable }, status: sourceStatus, driverId: auth.session.sub },
       data: { status: nextStatus, [TIMESTAMP_FIELD[nextStatus]]: new Date() },
     });
     if (result.count === updatable.length) {

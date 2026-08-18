@@ -42,7 +42,11 @@ const createSchema = z.object({
   contactEmail: z.string().trim().toLowerCase().email().optional().or(z.literal("")),
   phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   address: z.string().trim().max(MAX_BUSINESS_TEXT_LENGTH).optional(),
-  billingRate: z.number().positive().optional(),
+  // .finite() matters here specifically: plain z.number().positive() accepts
+  // Infinity (it's a positive number as far as JS/zod are concerned), which
+  // Postgres' float8 column would happily store — silently producing an
+  // Infinity totalAmount on every invoice generated for this business.
+  billingRate: z.number().positive().finite().optional(),
   // Omitted -> Prisma's schema default ("PER_TRIP") applies.
   billingType: z.enum(BILLING_TYPES).optional(),
 });
