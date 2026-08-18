@@ -53,6 +53,43 @@ describe("POST /api/businesses", () => {
     expect(first.status).toBe(201);
     expect(second.status).toBe(201);
   });
+
+  it("defaults billingType to PER_TRIP when not set", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createBusiness(jsonRequest("/api/businesses", "POST", { name: "Default Billing" }, token));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.business.billingType).toBe("PER_TRIP");
+  });
+
+  it("accepts PER_HOUR and FLAT_RATE billingType", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const hourly = await createBusiness(
+      jsonRequest("/api/businesses", "POST", { name: "Hourly Co", billingType: "PER_HOUR" }, token)
+    );
+    expect(hourly.status).toBe(201);
+    expect((await hourly.json()).business.billingType).toBe("PER_HOUR");
+
+    const flat = await createBusiness(
+      jsonRequest("/api/businesses", "POST", { name: "Flat Co", billingType: "FLAT_RATE" }, token)
+    );
+    expect(flat.status).toBe(201);
+    expect((await flat.json()).business.billingType).toBe("FLAT_RATE");
+  });
+
+  it("rejects an invalid billingType", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createBusiness(
+      jsonRequest("/api/businesses", "POST", { name: "Bad Billing", billingType: "PER_MONTH" }, token)
+    );
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("PATCH /api/businesses/[id]", () => {
@@ -88,5 +125,18 @@ describe("PATCH /api/businesses/[id]", () => {
     expect(clearRes.status).toBe(200);
     const clearBody = await clearRes.json();
     expect(clearBody.business.code).toBeNull();
+  });
+
+  it("changes billingType from the default PER_TRIP to FLAT_RATE", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const business = await createBusinessRow();
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await updateBusiness(
+      jsonRequest(`/api/businesses/${business.id}`, "PATCH", { billingType: "FLAT_RATE" }, token),
+      { params: { id: business.id } }
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).business.billingType).toBe("FLAT_RATE");
   });
 });

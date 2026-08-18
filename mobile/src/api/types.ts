@@ -75,6 +75,15 @@ export interface JobType {
   active: boolean;
 }
 
+// How Business.billingRate is interpreted when generating an invoice — see
+// the matching comment on BILLING_TYPES in backend/src/lib/constants.ts.
+export const BILLING_TYPES = [
+  { id: "PER_TRIP", label: "Per Trip" },
+  { id: "PER_HOUR", label: "Per Hour" },
+  { id: "FLAT_RATE", label: "Flat Rate" },
+] as const;
+export type BillingType = (typeof BILLING_TYPES)[number]["id"];
+
 export interface Business {
   id: string;
   name: string;
@@ -89,6 +98,10 @@ export interface Business {
   phone?: string | null;
   address?: string | null;
   billingRate?: number | null;
+  // Absent (not null) on the same Dispatch response shape as the financial
+  // fields above — always present for ADMIN/ACCOUNTANT. Defaults to
+  // PER_TRIP server-side for any business created before this field existed.
+  billingType?: BillingType;
 }
 
 export interface JobStop {

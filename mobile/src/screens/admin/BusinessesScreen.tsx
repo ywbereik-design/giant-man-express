@@ -2,11 +2,19 @@ import React, { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, Text, View, StyleSheet } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { api, ApiError } from "../../api/client";
-import { Business } from "../../api/types";
+import { Business, BILLING_TYPES, BillingType } from "../../api/types";
 import { Badge, Button, Card, CenteredSpinner, ErrorText, FieldInput, Label, SectionTitle } from "../../components/ui";
+import { ChipSelect } from "../../components/ChipSelect";
 import { isValidEmail, isValidPhone } from "../../lib/validation";
 import { spacing, ThemeColors } from "../../theme/theme";
 import { useTheme } from "../../theme/ThemeContext";
+
+const BILLING_TYPE_OPTIONS = BILLING_TYPES.map((t) => ({ id: t.id, label: t.label }));
+const BILLING_TYPE_LABEL: Record<BillingType, string> = {
+  PER_TRIP: "job",
+  PER_HOUR: "hour",
+  FLAT_RATE: "flat",
+};
 
 function parseRate(raw: string): { rate?: number; error?: string } {
   if (!raw.trim()) return {};
@@ -31,6 +39,7 @@ const BusinessRow = memo(function BusinessRow({
   editPhone,
   editAddress,
   editBillingRate,
+  editBillingType,
   editError,
   editSaving,
   onEditNameChange,
@@ -40,6 +49,7 @@ const BusinessRow = memo(function BusinessRow({
   onEditPhoneChange,
   onEditAddressChange,
   onEditBillingRateChange,
+  onEditBillingTypeChange,
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
@@ -53,6 +63,7 @@ const BusinessRow = memo(function BusinessRow({
   editPhone: string;
   editAddress: string;
   editBillingRate: string;
+  editBillingType: BillingType;
   editError: string | null;
   editSaving: boolean;
   onEditNameChange: (v: string) => void;
@@ -62,6 +73,7 @@ const BusinessRow = memo(function BusinessRow({
   onEditPhoneChange: (v: string) => void;
   onEditAddressChange: (v: string) => void;
   onEditBillingRateChange: (v: string) => void;
+  onEditBillingTypeChange: (v: string) => void;
   onStartEdit: (business: Business) => void;
   onCancelEdit: () => void;
   onSaveEdit: (business: Business) => void;
@@ -96,12 +108,20 @@ const BusinessRow = memo(function BusinessRow({
         <FieldInput value={editPhone} onChangeText={onEditPhoneChange} keyboardType="phone-pad" accessibilityLabel="Phone" />
         <Label>Address (optional)</Label>
         <FieldInput value={editAddress} onChangeText={onEditAddressChange} accessibilityLabel="Address" />
-        <Label>Billing Rate per Job ($, optional)</Label>
+        <Label>Billing Type</Label>
+        <ChipSelect options={BILLING_TYPE_OPTIONS} selectedId={editBillingType} onSelect={onEditBillingTypeChange} />
+        <Label>
+          {editBillingType === "FLAT_RATE"
+            ? "Flat Rate per Invoice ($, optional)"
+            : editBillingType === "PER_HOUR"
+              ? "Billing Rate per Hour ($, optional)"
+              : "Billing Rate per Job ($, optional)"}
+        </Label>
         <FieldInput
           value={editBillingRate}
           onChangeText={onEditBillingRateChange}
           keyboardType="decimal-pad"
-          accessibilityLabel="Billing Rate per Job"
+          accessibilityLabel="Billing Rate"
         />
         <ErrorText>{editError}</ErrorText>
         <Button title="Save Changes" onPress={() => onSaveEdit(item)} loading={editSaving} />
@@ -119,7 +139,14 @@ const BusinessRow = memo(function BusinessRow({
       {item.contactEmail && <Text style={styles.meta}>{item.contactEmail}</Text>}
       {item.phone && <Text style={styles.meta}>{item.phone}</Text>}
       {item.address && <Text style={styles.meta}>{item.address}</Text>}
-      <Text style={styles.meta}>Rate: {item.billingRate ? `$${item.billingRate.toFixed(2)} / job` : "not set"}</Text>
+      <Text style={styles.meta}>
+        Rate:{" "}
+        {item.billingRate
+          ? item.billingType === "FLAT_RATE"
+            ? `$${item.billingRate.toFixed(2)} flat / invoice`
+            : `$${item.billingRate.toFixed(2)} / ${BILLING_TYPE_LABEL[item.billingType ?? "PER_TRIP"]}`
+          : "not set"}
+      </Text>
       <View style={{ marginTop: spacing.sm }}>
         <Button title="Edit" variant="secondary" onPress={() => onStartEdit(item)} />
       </View>
@@ -139,6 +166,7 @@ export function BusinessesScreen() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [billingRate, setBillingRate] = useState("");
+  const [billingType, setBillingType] = useState<BillingType>("PER_TRIP");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -150,6 +178,7 @@ export function BusinessesScreen() {
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editBillingRate, setEditBillingRate] = useState("");
+  const [editBillingType, setEditBillingType] = useState<BillingType>("PER_TRIP");
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -199,6 +228,7 @@ export function BusinessesScreen() {
         phone: phone.trim() || undefined,
         address: address.trim() || undefined,
         billingRate: rate,
+        billingType,
       });
       setName("");
       setCode("");
@@ -207,6 +237,7 @@ export function BusinessesScreen() {
       setPhone("");
       setAddress("");
       setBillingRate("");
+      setBillingType("PER_TRIP");
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not add business");
@@ -224,6 +255,7 @@ export function BusinessesScreen() {
     setEditPhone(business.phone ?? "");
     setEditAddress(business.address ?? "");
     setEditBillingRate(business.billingRate ? String(business.billingRate) : "");
+    setEditBillingType(business.billingType ?? "PER_TRIP");
     setEditError(null);
   }, []);
 
@@ -259,6 +291,7 @@ export function BusinessesScreen() {
           phone: editPhone.trim() || undefined,
           address: editAddress.trim() || undefined,
           billingRate: rate,
+          billingType: editBillingType,
         });
         setEditingId(null);
         await load();
@@ -268,7 +301,17 @@ export function BusinessesScreen() {
         setEditSaving(false);
       }
     },
-    [editName, editCode, editContactName, editContactEmail, editPhone, editAddress, editBillingRate, load]
+    [
+      editName,
+      editCode,
+      editContactName,
+      editContactEmail,
+      editPhone,
+      editAddress,
+      editBillingRate,
+      editBillingType,
+      load,
+    ]
   );
 
   const renderItem = useCallback(
@@ -285,6 +328,7 @@ export function BusinessesScreen() {
           editPhone={isEditing ? editPhone : ""}
           editAddress={isEditing ? editAddress : ""}
           editBillingRate={isEditing ? editBillingRate : ""}
+          editBillingType={isEditing ? editBillingType : "PER_TRIP"}
           editError={isEditing ? editError : null}
           editSaving={isEditing ? editSaving : false}
           onEditNameChange={setEditName}
@@ -294,6 +338,7 @@ export function BusinessesScreen() {
           onEditPhoneChange={setEditPhone}
           onEditAddressChange={setEditAddress}
           onEditBillingRateChange={setEditBillingRate}
+          onEditBillingTypeChange={(v) => setEditBillingType(v as BillingType)}
           onStartEdit={startEdit}
           onCancelEdit={cancelEdit}
           onSaveEdit={saveEdit}
@@ -309,6 +354,7 @@ export function BusinessesScreen() {
       editPhone,
       editAddress,
       editBillingRate,
+      editBillingType,
       editError,
       editSaving,
       startEdit,
@@ -342,7 +388,19 @@ export function BusinessesScreen() {
               <FieldInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="613-555-0100" />
               <Label>Address (optional)</Label>
               <FieldInput value={address} onChangeText={setAddress} placeholder="100 Main St, Ottawa" />
-              <Label>Billing Rate per Job ($, optional)</Label>
+              <Label>Billing Type</Label>
+              <ChipSelect
+                options={BILLING_TYPE_OPTIONS}
+                selectedId={billingType}
+                onSelect={(v) => setBillingType(v as BillingType)}
+              />
+              <Label>
+                {billingType === "FLAT_RATE"
+                  ? "Flat Rate per Invoice ($, optional)"
+                  : billingType === "PER_HOUR"
+                    ? "Billing Rate per Hour ($, optional)"
+                    : "Billing Rate per Job ($, optional)"}
+              </Label>
               <FieldInput value={billingRate} onChangeText={setBillingRate} keyboardType="decimal-pad" placeholder="45" />
               <ErrorText>{error}</ErrorText>
               <Button title="Add Business" onPress={addBusiness} loading={saving} />

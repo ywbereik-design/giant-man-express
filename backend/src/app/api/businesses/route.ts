@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { parseBody, isError } from "@/lib/api";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
-import { MAX_BUSINESS_TEXT_LENGTH, MAX_BUSINESS_CODE_LENGTH, PHONE_PATTERN } from "@/lib/constants";
+import { MAX_BUSINESS_TEXT_LENGTH, MAX_BUSINESS_CODE_LENGTH, PHONE_PATTERN, BILLING_TYPES } from "@/lib/constants";
 
 export async function GET(req: NextRequest) {
   // Dispatch can see the client list (needed to assign jobs to a business)
@@ -43,6 +43,8 @@ const createSchema = z.object({
   phone: z.union([z.string().trim().regex(PHONE_PATTERN, "Enter a valid phone number"), z.literal("")]).optional(),
   address: z.string().trim().max(MAX_BUSINESS_TEXT_LENGTH).optional(),
   billingRate: z.number().positive().optional(),
+  // Omitted -> Prisma's schema default ("PER_TRIP") applies.
+  billingType: z.enum(BILLING_TYPES).optional(),
 });
 
 export async function POST(req: NextRequest) {

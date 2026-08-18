@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useMemo } from "react";
 import { FlatList, Text, View, StyleSheet } from "react-native";
 import { api } from "../../api/client";
-import { Business, Invoice } from "../../api/types";
+import { Business, Invoice, BILLING_TYPES } from "../../api/types";
 import { Button, Card, CenteredSpinner, ErrorText, Label, SectionTitle } from "../../components/ui";
 import { ChipSelect } from "../../components/ChipSelect";
 import { spacing, ThemeColors } from "../../theme/theme";
@@ -46,7 +46,13 @@ export function InvoicesScreen() {
 
   const loadPickerOptions = useCallback(async () => {
     const res = await api.get<{ businesses: Business[] }>("/api/businesses");
-    return res.businesses.map((b) => ({ id: b.id, label: b.name }));
+    // Surfaces the billing type right in the picker — an accountant about to
+    // generate an invoice should see up front whether this business bills
+    // per trip, per hour, or a flat rate, not discover it after the fact.
+    return res.businesses.map((b) => {
+      const typeLabel = BILLING_TYPES.find((t) => t.id === (b.billingType ?? "PER_TRIP"))?.label;
+      return { id: b.id, label: typeLabel ? `${b.name} (${typeLabel})` : b.name };
+    });
   }, []);
   const loadItems = useCallback(async (cursor?: string) => {
     const res = await api.get<{ invoices: Invoice[]; nextCursor: string | null }>(

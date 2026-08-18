@@ -6,7 +6,7 @@ import { parseBody, isError } from "@/lib/api";
 import { nextNumber } from "@/lib/numbering";
 import { runOrRespond, isResponse } from "@/lib/dbErrors";
 import { parsePaginationParams, buildPage } from "@/lib/pagination";
-import { MAX_BILLING_PERIOD_DAYS } from "@/lib/constants";
+import { MAX_BILLING_PERIOD_DAYS, BillingType } from "@/lib/constants";
 
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ["ADMIN", "ACCOUNTANT"]);
@@ -71,7 +71,10 @@ export async function POST(req: NextRequest) {
       businessId,
       status: "DELIVERED",
       deliveredAt: { gte: start, lt: end },
-      // Never bill the same delivered job on two different invoices.
+      // Never bill the same delivered job on two different invoices — applies
+      // to all three billing types below, including FLAT_RATE, which still
+      // links every covered job to a (possibly $0) line item specifically so
+      // this filter keeps working for it too.
       invoiceLineItems: { none: {} },
     },
     include: { jobType: true },
@@ -86,14 +89,69 @@ export async function POST(req: NextRequest) {
   }
 
   const rate = business.billingRate;
-  const lineItemsData = jobs.map((job) => ({
-    jobId: job.id,
-    description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")})`,
-    quantity: 1,
-    rate,
-    amount: rate,
-  }));
-  const totalAmount = lineItemsData.reduce((sum, li) => sum + li.amount, 0);
+  const billingType = business.billingType as BillingType;
+  type LineItemInput = { jobId: string | null; description: string; quantity: number; rate: number; amount: number };
+  let lineItemsData: LineItemInput[];
+
+  if (billingType === "PER_HOUR") {
+    // A job can only be billed by the hour if it actually has a valid
+    // pickup->delivery span — same condition GET /api/reports/hours-by-business
+    // uses to skip a job rather than let it silently corrupt totalHours.
+    const billable = jobs.filter((job) => job.pickedUpAt && job.deliveredAt && job.deliveredAt > job.pickedUpAt);
+    if (billable.length === 0) {
+      return Response.json(
+        { error: "No delivered jobs in this period have a valid pickup/delivery time to bill by the hour" },
+        { status: 400 }
+      );
+    }
+    lineItemsData = billable.map((job) => {
+      const hours = Math.round(((job.deliveredAt!.getTime() - job.pickedUpAt!.getTime()) / 3600000) * 100) / 100;
+      return {
+        jobId: job.id,
+        description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")}) — ${hours.toFixed(2)}h @ $${rate.toFixed(2)}/h`,
+        quantity: hours,
+        rate,
+        amount: Math.round(hours * rate * 100) / 100,
+      };
+    });
+  } else if (billingType === "FLAT_RATE") {
+    // Not billed per job — one flat total covers every delivered job in the
+    // period. Each job still gets its own $0 line item (rather than being
+    // left off the invoice entirely) for two reasons: it gives the client an
+    // itemized list of what the flat rate actually covered, and it links
+    // every one of those jobs to *this* invoice so the `invoiceLineItems:
+    // { none: {} }` filter above correctly excludes them from any future
+    // invoice — without that link, a later invoice covering an overlapping
+    // period could re-bill the same jobs a flat-rate invoice already covered.
+    lineItemsData = [
+      ...jobs.map((job) => ({
+        jobId: job.id,
+        description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")}) — included in flat rate`,
+        quantity: 1,
+        rate: 0,
+        amount: 0,
+      })),
+      {
+        jobId: null,
+        description: `Flat rate — ${jobs.length} job${jobs.length === 1 ? "" : "s"}, ${start.toLocaleDateString("en-CA")} to ${end.toLocaleDateString("en-CA")}`,
+        quantity: 1,
+        rate,
+        amount: rate,
+      },
+    ];
+  } else {
+    // PER_TRIP — the original, still-default behavior: one flat charge per
+    // delivered job regardless of how long it took.
+    lineItemsData = jobs.map((job) => ({
+      jobId: job.id,
+      description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")})`,
+      quantity: 1,
+      rate,
+      amount: rate,
+    }));
+  }
+
+  const totalAmount = Math.round(lineItemsData.reduce((sum, li) => sum + li.amount, 0) * 100) / 100;
 
   // The `invoiceLineItems: { none: {} }` filter above handles the common
   // sequential case; the @@unique([jobId]) constraint on InvoiceLineItem is

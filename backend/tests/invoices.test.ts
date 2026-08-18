@@ -152,6 +152,91 @@ describe("POST /api/invoices", () => {
   });
 });
 
+describe("POST /api/invoices — PER_HOUR billing", () => {
+  it("bills each job by hours worked (pickedUpAt -> deliveredAt) at the hourly rate", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness({ billingRate: 40, billingType: "PER_HOUR" });
+    const pickedUpAt = new Date("2026-01-15T10:00:00.000Z");
+    const deliveredAt = new Date("2026-01-15T12:30:00.000Z"); // exactly 2.5h
+    await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      pickedUpAt,
+      deliveredAt,
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createInvoice(jsonRequest("/api/invoices", "POST", { businessId: business.id, ...PERIOD }, token));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.invoice.lineItems).toHaveLength(1);
+    expect(body.invoice.lineItems[0].quantity).toBe(2.5);
+    expect(body.invoice.totalAmount).toBe(100); // 2.5h * $40/h
+  });
+
+  it("skips a job with no pickedUpAt/deliveredAt span and rejects if none are billable", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness({ billingRate: 40, billingType: "PER_HOUR" });
+    // Delivered, in period, but never actually picked up (no pickedUpAt) —
+    // can happen for a job with no pickup address (see DRIVER_ALLOWED_TRANSITIONS'
+    // ACCEPTED -> ON_THE_WAY skip).
+    await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      deliveredAt: IN_PERIOD,
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createInvoice(jsonRequest("/api/invoices", "POST", { businessId: business.id, ...PERIOD }, token));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/valid pickup\/delivery time/i);
+  });
+});
+
+describe("POST /api/invoices — FLAT_RATE billing", () => {
+  it("bills one flat total regardless of how many jobs are in the period", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness({ billingRate: 500, billingType: "FLAT_RATE" });
+    await createJob({ driverId: driver.id, jobTypeId: jobType.id, businessId: business.id, status: "DELIVERED", deliveredAt: IN_PERIOD });
+    await createJob({ driverId: driver.id, jobTypeId: jobType.id, businessId: business.id, status: "DELIVERED", deliveredAt: IN_PERIOD });
+    await createJob({ driverId: driver.id, jobTypeId: jobType.id, businessId: business.id, status: "DELIVERED", deliveredAt: IN_PERIOD });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createInvoice(jsonRequest("/api/invoices", "POST", { businessId: business.id, ...PERIOD }, token));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    // 3 job-audit line items ($0 each) + 1 flat-rate summary line item.
+    expect(body.invoice.lineItems).toHaveLength(4);
+    expect(body.invoice.totalAmount).toBe(500);
+  });
+
+  it("still links every covered job so a later invoice can't re-bill them", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness({ billingRate: 500, billingType: "FLAT_RATE" });
+    await createJob({ driverId: driver.id, jobTypeId: jobType.id, businessId: business.id, status: "DELIVERED", deliveredAt: IN_PERIOD });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const first = await createInvoice(jsonRequest("/api/invoices", "POST", { businessId: business.id, ...PERIOD }, token));
+    expect(first.status).toBe(201);
+
+    const second = await createInvoice(jsonRequest("/api/invoices", "POST", { businessId: business.id, ...PERIOD }, token));
+    expect(second.status).toBe(400);
+  });
+});
+
 describe("GET /api/invoices", () => {
   it("rejects a DISPATCH session", async () => {
     const { staff } = await createStaff({ role: "DISPATCH" });

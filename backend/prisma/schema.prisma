@@ -89,7 +89,11 @@ model Business {
   contactEmail String?
   phone        String?
   address      String?
-  billingRate  Float? // flat $ charged per delivered job on this business's invoices, optional
+  // Meaning depends on billingType — see BILLING_TYPES/BillingType in
+  // src/lib/constants.ts for the full breakdown of what each value means and
+  // how POST /api/invoices uses it.
+  billingRate  Float?
+  billingType  String  @default("PER_TRIP")
   createdAt    DateTime @default(now())
 
   jobs     Job[]

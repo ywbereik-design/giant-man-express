@@ -15,7 +15,12 @@ describe("GET /api/reports/hours-by-business", () => {
     await createJob({ driverId: driver.id, jobTypeId: jobType.id, businessId: business.id, status: "DELIVERED", pickedUpAt, deliveredAt });
     const token = await tokenFor(staff.id, "ADMIN", staff.name);
 
-    const res = await hoursByBusiness(getRequest(`/api/reports/hours-by-business?${PERIOD}`, token));
+    // Scoped to this test's own business — the test DB is only truncated
+    // once per whole `vitest run`, so without this, any other test creating
+    // a delivered job for a *different* business inside this same hardcoded
+    // January 2026 window (unscoped, this route aggregates every business)
+    // would inflate rows.length here.
+    const res = await hoursByBusiness(getRequest(`/api/reports/hours-by-business?${PERIOD}&businessId=${business.id}`, token));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.rows).toHaveLength(1);

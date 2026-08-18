@@ -107,3 +107,14 @@ export const MAX_BILLING_PERIOD_DAYS = 366;
 // A dispatcher-facing lookup code, not free-form prose — short like
 // employeeCode, same reasoning as MAX_LICENSE_TEXT_LENGTH.
 export const MAX_BUSINESS_CODE_LENGTH = 30;
+
+// How Business.billingRate is interpreted when generating an invoice (see
+// POST /api/invoices) — a closed list, not free text, since it drives real
+// arithmetic there rather than just being displayed.
+//   PER_TRIP:   billingRate is $ per delivered job (one line item per job).
+//   PER_HOUR:   billingRate is $ per hour of a job's pickedUpAt->deliveredAt
+//               span (one line item per job, quantity = hours worked).
+//   FLAT_RATE:  billingRate is one flat $ total for the whole invoice,
+//               regardless of how many jobs fall in the period.
+export const BILLING_TYPES = ["PER_TRIP", "PER_HOUR", "FLAT_RATE"] as const;
+export type BillingType = (typeof BILLING_TYPES)[number];

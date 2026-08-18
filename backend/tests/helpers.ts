@@ -46,11 +46,14 @@ export async function createJobType() {
   return prisma.jobType.create({ data: { name: unique("JobType"), active: true } });
 }
 
-export async function createBusiness(overrides: Partial<{ billingRate: number | null }> = {}) {
+export async function createBusiness(
+  overrides: Partial<{ billingRate: number | null; billingType: string }> = {}
+) {
   return prisma.business.create({
     data: {
       name: unique("Business"),
       billingRate: overrides.billingRate === undefined ? 50 : overrides.billingRate,
+      ...(overrides.billingType ? { billingType: overrides.billingType } : {}),
     },
   });
 }
