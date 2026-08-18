@@ -200,6 +200,52 @@ describe("POST /api/invoices — PER_HOUR billing", () => {
     const body = await res.json();
     expect(body.error).toMatch(/valid pickup\/delivery time/i);
   });
+
+  // Regression coverage: when the period has a *mix* of hour-billable and
+  // non-billable jobs, the non-billable one used to be silently dropped —
+  // never linked to any invoice line item, and never billable, because its
+  // fixed deliveredAt would fall outside every future invoice period's
+  // date-range query. It must still get linked (via a $0 line item, same
+  // pattern as FLAT_RATE's per-job link) so it doesn't vanish with no record.
+  it("still links a non-billable job to the invoice (at $0) when other jobs in the period are billable", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness({ billingRate: 40, billingType: "PER_HOUR" });
+    const pickedUpAt = new Date("2026-01-15T10:00:00.000Z");
+    const deliveredAt = new Date("2026-01-15T11:00:00.000Z"); // exactly 1h
+    const billableJob = await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      pickedUpAt,
+      deliveredAt,
+    });
+    // No pickedUpAt — e.g. a job with no pickupAddress skipped straight from
+    // ACCEPTED to ON_THE_WAY, so it never has an hourly span to bill.
+    const nonBillableJob = await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      deliveredAt: IN_PERIOD,
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await createInvoice(jsonRequest("/api/invoices", "POST", { businessId: business.id, ...PERIOD }, token));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.invoice.lineItems).toHaveLength(2);
+    expect(body.invoice.totalAmount).toBe(40); // only the billable job's 1h * $40/h
+
+    // Both jobs are now linked — the non-billable one at $0 — so neither can
+    // ever be picked up by a later invoice and double-billed or lost.
+    const lineItemJobIds = body.invoice.lineItems.map((li: { jobId: string | null }) => li.jobId).sort();
+    expect(lineItemJobIds).toEqual([billableJob.id, nonBillableJob.id].sort());
+    const zeroItem = body.invoice.lineItems.find((li: { jobId: string | null }) => li.jobId === nonBillableJob.id);
+    expect(zeroItem.amount).toBe(0);
+  });
 });
 
 describe("POST /api/invoices — FLAT_RATE billing", () => {

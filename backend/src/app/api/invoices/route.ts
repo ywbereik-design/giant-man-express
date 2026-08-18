@@ -97,23 +97,44 @@ export async function POST(req: NextRequest) {
     // A job can only be billed by the hour if it actually has a valid
     // pickup->delivery span — same condition GET /api/reports/hours-by-business
     // uses to skip a job rather than let it silently corrupt totalHours.
-    const billable = jobs.filter((job) => job.pickedUpAt && job.deliveredAt && job.deliveredAt > job.pickedUpAt);
+    const isHourBillable = (job: (typeof jobs)[number]) =>
+      Boolean(job.pickedUpAt && job.deliveredAt && job.deliveredAt > job.pickedUpAt);
+    const billable = jobs.filter(isHourBillable);
+    const nonBillable = jobs.filter((job) => !isHourBillable(job));
     if (billable.length === 0) {
       return Response.json(
         { error: "No delivered jobs in this period have a valid pickup/delivery time to bill by the hour" },
         { status: 400 }
       );
     }
-    lineItemsData = billable.map((job) => {
-      const hours = Math.round(((job.deliveredAt!.getTime() - job.pickedUpAt!.getTime()) / 3600000) * 100) / 100;
-      return {
+    lineItemsData = [
+      ...billable.map((job) => {
+        const hours = Math.round(((job.deliveredAt!.getTime() - job.pickedUpAt!.getTime()) / 3600000) * 100) / 100;
+        return {
+          jobId: job.id,
+          description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")}) — ${hours.toFixed(2)}h @ $${rate.toFixed(2)}/h`,
+          quantity: hours,
+          rate,
+          amount: Math.round(hours * rate * 100) / 100,
+        };
+      }),
+      // A job delivered in this period but missing a valid pickup/delivery
+      // span (e.g. no pickupAddress on the job, so the driver flow skips
+      // PICKED_UP entirely — see DRIVER_ALLOWED_TRANSITIONS) can't be billed
+      // by the hour. Still link it to *this* invoice with a $0 line item —
+      // same reasoning as FLAT_RATE's per-job link above — instead of just
+      // leaving it out: deliveredAt is fixed in the past, so once this
+      // period's date-range window closes, an unlinked job would never
+      // appear in any future invoice query again and would go permanently
+      // unbilled with no record anywhere that it happened.
+      ...nonBillable.map((job) => ({
         jobId: job.id,
-        description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")}) — ${hours.toFixed(2)}h @ $${rate.toFixed(2)}/h`,
-        quantity: hours,
+        description: `${job.jobType.name} — ${job.title} (${job.deliveredAt!.toLocaleDateString("en-CA")}) — not billed: no valid pickup/delivery time recorded`,
+        quantity: 0,
         rate,
-        amount: Math.round(hours * rate * 100) / 100,
-      };
-    });
+        amount: 0,
+      })),
+    ];
   } else if (billingType === "FLAT_RATE") {
     // Not billed per job — one flat total covers every delivered job in the
     // period. Each job still gets its own $0 line item (rather than being

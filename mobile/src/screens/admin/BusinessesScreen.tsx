@@ -261,6 +261,13 @@ export function BusinessesScreen() {
 
   const cancelEdit = useCallback(() => setEditingId(null), []);
 
+  // Wrapped (not passed as an inline arrow at the call site below) so this
+  // prop keeps a stable identity across renders like every other
+  // onEdit*Change setter here — otherwise a fresh closure on every
+  // renderItem call would defeat BusinessRow's memoization for every row,
+  // not just the one being edited, on every keystroke.
+  const onEditBillingTypeChange = useCallback((v: string) => setEditBillingType(v as BillingType), []);
+
   const saveEdit = useCallback(
     async (business: Business) => {
       setEditError(null);
@@ -338,7 +345,7 @@ export function BusinessesScreen() {
           onEditPhoneChange={setEditPhone}
           onEditAddressChange={setEditAddress}
           onEditBillingRateChange={setEditBillingRate}
-          onEditBillingTypeChange={(v) => setEditBillingType(v as BillingType)}
+          onEditBillingTypeChange={onEditBillingTypeChange}
           onStartEdit={startEdit}
           onCancelEdit={cancelEdit}
           onSaveEdit={saveEdit}
@@ -357,6 +364,7 @@ export function BusinessesScreen() {
       editBillingType,
       editError,
       editSaving,
+      onEditBillingTypeChange,
       startEdit,
       cancelEdit,
       saveEdit,

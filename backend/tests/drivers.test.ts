@@ -191,6 +191,48 @@ describe("DELETE /api/drivers/[id]", () => {
     expect(await prisma.job.findUnique({ where: { id: job.id } })).not.toBeNull();
   });
 
+  // A FLAT_RATE invoice links every covered job with a $0 line item purely to
+  // mark it "billed" (see POST /api/invoices) — the amount is zero, but the
+  // job is just as much "on an issued invoice" as a PER_TRIP job with a real
+  // dollar amount. The force-delete guard checks for the *existence* of an
+  // InvoiceLineItem row, not its amount, so this must block exactly the same
+  // way the $-amount case above does.
+  it("refuses to delete a driver's job that's linked to an invoice via a $0 FLAT_RATE line item", async () => {
+    const { staff } = await createStaff({ role: "ADMIN" });
+    const { driver } = await createDriver();
+    const jobType = await createJobType();
+    const business = await createBusiness({ billingRate: 500, billingType: "FLAT_RATE" });
+    const job = await createJob({
+      driverId: driver.id,
+      jobTypeId: jobType.id,
+      businessId: business.id,
+      status: "DELIVERED",
+      deliveredAt: new Date(),
+    });
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber: `INV-FLAT-${Date.now()}`,
+        businessId: business.id,
+        periodStart: new Date(),
+        periodEnd: new Date(),
+        totalAmount: 500,
+      },
+    });
+    await prisma.invoiceLineItem.create({
+      data: { invoiceId: invoice.id, jobId: job.id, description: "included in flat rate", quantity: 1, rate: 0, amount: 0 },
+    });
+    const token = await tokenFor(staff.id, "ADMIN", staff.name);
+
+    const res = await deleteDriver(jsonRequest(`/api/drivers/${driver.id}?force=true`, "DELETE", undefined, token), {
+      params: { id: driver.id },
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe("INVOICED");
+    expect(await prisma.driver.findUnique({ where: { id: driver.id } })).not.toBeNull();
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).not.toBeNull();
+  });
+
   it("refuses (and doesn't corrupt data) when a job gets invoiced in the race window between the pre-check and the delete transaction", async () => {
     const { staff } = await createStaff({ role: "ADMIN" });
     const { driver } = await createDriver();
